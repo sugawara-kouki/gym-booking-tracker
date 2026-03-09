@@ -1,0 +1,16 @@
+{
+  "name": "gym-booking-tracker",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy --minify",
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings"
+  },
+  "dependencies": {
+    "hono": "^4.12.5"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260307.1",
+    "wrangler": "^4.4.0"
+  }
+}
