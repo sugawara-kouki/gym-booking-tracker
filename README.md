@@ -78,5 +78,22 @@ npm run cf-typegen
 - **Framework**: Hono
 - **Runtime**: Cloudflare Workers
 - **Language**: TypeScript
-- **Storage**: Cloudflare D1 (RDB) または KV
+- **Storage**: Cloudflare D1 (RDB)
 - **CI/CD**: GitHub Actions
+
+---
+
+## 7. ドキュメント一覧
+
+プロジェクトの理解を深めるためのドキュメント。
+
+### 設計 (Design)
+- [API 設計書](docs/design/api-design.md)
+- [データベース設計書](docs/design/db-design.md)
+- [システム構成図 (Markdown)](docs/design/architecture.md)
+- [システム構成図 (Visual/HTML)](docs/design/architecture.html)
+
+### ガイド・手順書 (Guide)
+- [Google Cloud (Gmail API) セットアップ手順](docs/guide/google-cloud-setup.md)
+- [データベース (D1) セットアップ手順](docs/guide/database-setup.md)
+- [トラブルシューティング・備忘録](docs/guide/troubleshooting.md)

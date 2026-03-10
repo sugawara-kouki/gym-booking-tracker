@@ -1,6 +1,8 @@
-# システム構成図 (Architecture Diagram)
+本システムのデータの流れをまとめた図です。
 
-本システムのデータの流れをシンプルにまとめた図です。
+![System Architecture](./architecture.png)
+
+## 論理構成 (Mermaid)
 
 ```mermaid
 graph LR
