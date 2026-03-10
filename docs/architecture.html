@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gym Booking Tracker - Architecture Blueprint</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Public Sans', sans-serif;
+            background: #f8fafc;
+            color: #0f172a;
+            margin: 0;
+            padding: 0;
+        }
+
+        .aws-group {
+            border: 2px dashed #cbd5e1;
+            background: #ffffff;
+            position: relative;
+            border-radius: 1.5rem;
+        }
+
+        .aws-group-label {
+            position: absolute;
+            top: -14px;
+            left: 2rem;
+            background: #ffffff;
+            padding: 0 1rem;
+            font-size: 13px;
+            color: #475569;
+            font-weight: 800;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            letter-spacing: 0.05em;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .aws-node {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border-radius: 1rem;
+            transition: all 0.2s ease;
+        }
+
+        .aws-node:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 20px -5px rgba(0, 0, 0, 0.15);
+            border-color: #3b82f6;
+        }
+
+        /* Persistent Arrow Styles */
+        .arrow-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            min-width: 60px;
+            position: relative;
+        }
+
+        .arrow-shaft-wrapper {
+            width: 100%;
+            height: 2px;
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .arrow-shaft {
+            height: 2px;
+            background: #94a3b8;
+            width: 100%;
+            border-radius: 2px;
+        }
+
+        .arrow-head-right {
+            position: absolute;
+            right: -2px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 0;
+            height: 0;
+            border-top: 6px solid transparent;
+            border-bottom: 6px solid transparent;
+            border-left: 10px solid #94a3b8;
+        }
+
+        .arrow-head-left {
+            position: absolute;
+            left: -2px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 0;
+            height: 0;
+            border-top: 6px solid transparent;
+            border-bottom: 6px solid transparent;
+            border-right: 10px solid #94a3b8;
+        }
+
+        .arrow-label {
+            font-size: 10px;
+            font-weight: 800;
+            color: #64748b;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            white-space: nowrap;
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .step-badge {
+            background: #3b82f6;
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 900;
+            margin-right: 12px;
+            box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+        }
+
+        .main-diagram {
+            display: flex;
+            align-items: stretch;
+            gap: 0.5rem;
+            width: 100%;
+        }
+
+        .diagram-section {
+            padding: 40px 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-50 min-h-screen">
+    <!-- Header (Same as v1.2) -->
+    <header class="bg-[#232f3e] text-white p-6 flex justify-between items-center shadow-lg sticky top-0 z-50">
+        <div>
+            <h1 class="text-2xl font-bold tracking-tight">Gym Booking Tracker: System Architecture</h1>
+            <p class="text-slate-400 text-xs mt-1 uppercase tracking-[0.2em] font-bold italic opacity-80">Full-Stack
+                Infrastructure Blueprint &middot; v1.3</p>
+        </div>
+        <div class="flex items-center gap-6">
+            <div class="flex gap-4">
+                <img src="https://hono.dev/images/logo.png" class="h-8 w-8 object-contain" alt="Hono">
+                <img src="https://www.vectorlogo.zone/logos/cloudflare/cloudflare-icon.svg"
+                    class="h-8 w-8 object-contain" alt="Cloudflare">
+                <img src="https://www.vectorlogo.zone/logos/google_cloud/google_cloud-icon.svg"
+                    class="h-8 w-8 object-contain" alt="GCP">
+            </div>
+        </div>
+    </header>
+
+    <main class="p-8 max-w-[1440px] mx-auto flex flex-col gap-12">
+        <!-- Diagram Area -->
+        <div class="bg-white p-12 lg:p-20 rounded-[3rem] border border-slate-200 shadow-2xl flex flex-col items-center">
+            <div class="main-diagram">
+                <!-- Zone 1: Ingestion -->
+                <div class="diagram-section w-[12%]">
+                    <div class="aws-node p-6 text-center">
+                        <i data-lucide="building-2" class="w-12 h-12 mx-auto text-amber-500 mb-3"></i>
+                        <div class="text-[10px] font-black uppercase text-slate-500 tracking-tighter">Facility</div>
+                    </div>
+                </div>
+
+                <!-- Arrow 1 -->
+                <div class="w-[8%] flex items-center">
+                    <div class="arrow-container">
+                        <span class="arrow-label">Email</span>
+                        <div class="arrow-shaft-wrapper">
+                            <div class="arrow-shaft"></div>
+                            <div class="arrow-head-right"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Zone 2: Gmail (GCP) -->
+                <div class="diagram-section w-[15%]">
+                    <div class="aws-group p-8 flex items-center justify-center min-h-[180px]">
+                        <span class="aws-group-label text-[11px]">Google Cloud</span>
+                        <div class="aws-node p-5 flex flex-col items-center gap-2 border-amber-100">
+                            <img src="https://www.vectorlogo.zone/logos/google_cloud/google_cloud-icon.svg"
+                                class="w-10 h-10" alt="">
+                            <div class="text-[11px] font-black text-slate-700">Gmail API</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Arrow 2: Bidirectional -->
+                <div class="w-[10%] flex items-center">
+                    <div class="arrow-container gap-4">
+                        <span class="arrow-label text-blue-500">OAuth / Fetch</span>
+                        <div class="arrow-shaft">
+                            <div class="arrow-head-right"></div>
+                        </div>
+                        <div class="arrow-shaft">
+                            <div class="arrow-head-left"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Zone 3: Cloudflare Ecosystem (LArgest) -->
+                <div class="diagram-section w-[35%]">
+                    <div class="aws-group p-10 grid grid-cols-2 gap-8 border-orange-200 bg-orange-50/5">
+                        <span class="aws-group-label !bg-orange-50 !border-orange-200 !text-orange-700">Cloudflare
+                            Workers Platform</span>
+                        <div class="aws-node p-6 flex flex-col items-center gap-3 border-orange-400/30">
+                            <img src="https://hono.dev/images/logo.png" class="w-12 h-12" alt="">
+                            <div class="text-[12px] font-black text-slate-800">Hono Engine</div>
+                            <div class="flex gap-1">
+                                <span
+                                    class="text-[8px] font-bold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded">Process</span>
+                                <span
+                                    class="text-[8px] font-bold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded">Store</span>
+                            </div>
+                        </div>
+                        <div class="aws-node p-6 flex flex-col items-center justify-center gap-3 border-blue-400/30">
+                            <img src="https://www.vectorlogo.zone/logos/cloudflare/cloudflare-icon.svg"
+                                class="w-12 h-12" alt="">
+                            <div class="text-[12px] font-black text-slate-800">D1 Database</div>
+                            <span class="text-[8px] font-bold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">Edge
+                                SQL</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Arrow 3 -->
+                <div class="w-[8%] flex items-center">
+                    <div class="arrow-container">
+                        <span class="arrow-label text-emerald-600">REST API</span>
+                        <div class="arrow-shaft">
+                            <div class="arrow-head-right"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Zone 4: Client -->
+                <div class="diagram-section w-[12%]">
+                    <div class="aws-node p-6 text-center border-emerald-200">
+                        <i data-lucide="monitor" class="w-12 h-12 mx-auto text-emerald-600 mb-3"></i>
+                        <div class="text-[10px] font-black uppercase text-slate-800">Dashboard</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Explanations Below (As requested) -->
+        <div class="bg-white p-12 rounded-[2.5rem] border border-slate-100 shadow-lg">
+            <h3 class="text-xl font-black text-slate-900 mb-10 border-l-4 border-blue-500 pl-6">Technical Workflow Guide
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12">
+                <div>
+                    <div class="flex items-center mb-4">
+                        <span class="step-badge">1</span>
+                        <h4 class="text-xs font-black text-slate-800 uppercase tracking-widest">Notification</h4>
+                    </div>
+                    <p class="text-[12px] text-slate-500 leading-relaxed font-medium">
+                        施設からGmail宛に、抽選結果や仮予約完了の通知メールが送信されます。</p>
+                </div>
+                <div>
+                    <div class="flex items-center mb-4">
+                        <span class="step-badge">2</span>
+                        <h4 class="text-xs font-black text-slate-800 uppercase tracking-widest">Capture</h4>
+                    </div>
+                    <p class="text-[12px] text-slate-500 leading-relaxed font-medium">Cloudflare Workersが定期実行によりGmail
+                        API経由で新着メールを検知・取得します。</p>
+                </div>
+                <div>
+                    <div class="flex items-center mb-4">
+                        <span class="step-badge">3</span>
+                        <h4 class="text-xs font-black text-slate-800 uppercase tracking-widest">Normalization</h4>
+                    </div>
+                    <p class="text-[12px] text-slate-500 leading-relaxed font-medium">Hono上のロジックがメール本文を解析。予約情報を抽出し、D1
+                        DBへ永続化します。</p>
+                </div>
+                <div>
+                    <div class="flex items-center mb-4">
+                        <span class="step-badge">4</span>
+                        <h4 class="text-xs font-black text-slate-800 uppercase tracking-widest">Presentation</h4>
+                    </div>
+                    <p class="text-[12px] text-slate-500 leading-relaxed font-medium">
+                        保存されたデータはAPIを通じてダッシュボードに反映。ユーザーは一括管理が可能です。</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="py-12 flex justify-center opacity-50">
+        <div class="text-[10px] font-black uppercase tracking-[0.5em] text-slate-500">System Architecture Blueprint v1.3
+            &copy; 2026</div>
+    </footer>
+
+    <script> lucide.createIcons(); </script>
+</body>
+
+</html>
