@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { GmailService } from './services/gmail'
+import { SyncOrchestrator } from './services/sync-orchestrator'
 
 type Bindings = {
   GOOGLE_CLIENT_ID: string
@@ -47,6 +48,28 @@ app.get('/poc/db-test', async (c) => {
       success: true,
       message: 'D1 Connection Successful',
       data: results
+    })
+  } catch (error: any) {
+    console.error(error)
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500)
+  }
+})
+
+/**
+ * PoC: 同期処理（SyncOrchestrator）の実行テスト
+ */
+app.get('/poc/sync', async (c) => {
+  try {
+    const orchestrator = new SyncOrchestrator(c.env)
+    const result = await orchestrator.sync()
+
+    return c.json({
+      success: true,
+      message: 'Sync completed',
+      data: result
     })
   } catch (error: any) {
     console.error(error)

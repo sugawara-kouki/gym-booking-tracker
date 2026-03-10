@@ -46,15 +46,16 @@ export class GmailService {
     }
 
     /**
-     * メッセージ一覧を取得する
+     * メッセージ一覧を取得する（クエリ指定可能）
      */
-    async listMessages(maxResults: number = 10): Promise<GmailMessageListResponse> {
+    async listMessages(maxResults: number = 10, query: string = ''): Promise<GmailMessage[]> {
         const accessToken = await this.getAccessToken();
 
         const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages');
         url.searchParams.set('maxResults', maxResults.toString());
-        // 必要に応じて、ここで「体育館」関連のキーワードで検索フィルタを入れることも可能
-        // url.searchParams.set('q', '体育館');
+        if (query) {
+            url.searchParams.set('q', query);
+        }
 
         const response = await fetch(url.toString(), {
             headers: {
@@ -67,6 +68,47 @@ export class GmailService {
             throw new Error(`Failed to fetch messages: ${error}`);
         }
 
-        return await response.json() as GmailMessageListResponse;
+        const data = await response.json() as GmailMessageListResponse;
+        return data.messages || [];
+    }
+
+    /**
+     * メッセージの詳細（本文を含む）を取得する
+     */
+    async getMessage(messageId: string): Promise<{ id: string; snippet: string; body?: string }> {
+        const accessToken = await this.getAccessToken();
+
+        const url = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}`;
+        const response = await fetch(url, {
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+            },
+        });
+
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(`Failed to fetch message ${messageId}: ${error}`);
+        }
+
+        const data = await response.json() as any;
+
+        // 簡単な本文抽出 (実際には multipart などの考慮が必要だが、PoCレベルでは一旦 snippet + 平文を優先)
+        let body = data.snippet;
+        if (data.payload && data.payload.parts) {
+            // text/plain の部分を探す
+            const part = data.payload.parts.find((p: any) => p.mimeType === 'text/plain');
+            if (part && part.body && part.body.data) {
+                // Base64Url decode
+                body = atob(part.body.data.replace(/-/g, '+').replace(/_/g, '/'));
+            }
+        } else if (data.payload && data.payload.body && data.payload.body.data) {
+            body = atob(data.payload.body.data.replace(/-/g, '+').replace(/_/g, '/'));
+        }
+
+        return {
+            id: data.id,
+            snippet: data.snippet,
+            body: body
+        };
     }
 }
