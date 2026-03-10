@@ -92,17 +92,23 @@ export class GmailService {
 
         const data = await response.json() as any;
 
-        // 簡単な本文抽出 (実際には multipart などの考慮が必要だが、PoCレベルでは一旦 snippet + 平文を優先)
+        // Base64UrlをデコードしてUTF-8文字列に変換
+        const decodeBase64 = (base64Url: string) => {
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const binString = atob(base64);
+            const bytes = Uint8Array.from(binString, (m) => m.codePointAt(0)!);
+            return new TextDecoder().decode(bytes);
+        };
+
         let body = data.snippet;
         if (data.payload && data.payload.parts) {
             // text/plain の部分を探す
             const part = data.payload.parts.find((p: any) => p.mimeType === 'text/plain');
             if (part && part.body && part.body.data) {
-                // Base64Url decode
-                body = atob(part.body.data.replace(/-/g, '+').replace(/_/g, '/'));
+                body = decodeBase64(part.body.data);
             }
         } else if (data.payload && data.payload.body && data.payload.body.data) {
-            body = atob(data.payload.body.data.replace(/-/g, '+').replace(/_/g, '/'));
+            body = decodeBase64(data.payload.body.data);
         }
 
         return {

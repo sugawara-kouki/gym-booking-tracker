@@ -29,21 +29,29 @@ export class SyncOrchestrator {
 
         try {
             // 2. メッセージ一覧の取得
-            // 札幌市のシステムからのメールに絞って取得
+            const limit = 500;
             const query = 'subject:"札幌市公共施設予約情報システム"';
-            const messages = await gmail.listMessages(10, query);
+            console.log(`[Sync] Fetching up to ${limit} messages with query: ${query}`);
+            const messages = await gmail.listMessages(limit, query);
             totalCount = messages.length;
+            console.log(`[Sync] Found ${totalCount} messages to process.`);
 
             // sync_runs の total_count を更新
             await db.prepare('UPDATE sync_runs SET total_count = ? WHERE id = ?')
                 .bind(totalCount, runId).run();
 
             // 3. 各メッセージの処理
+            let processed = 0;
             for (const msg of messages) {
                 const rawMailId = msg.id;
+                processed++;
+                if (processed % 10 === 0) {
+                    console.log(`[Sync] Progress: ${processed}/${totalCount}...`);
+                }
+                let detail: any = null;
                 try {
                     // 詳細（本文）を取得
-                    const detail = await gmail.getMessage(rawMailId);
+                    detail = await gmail.getMessage(rawMailId);
                     if (!detail || !detail.snippet) {
                         throw new Error('Email body is empty');
                     }
@@ -56,8 +64,6 @@ export class SyncOrchestrator {
                     }
 
                     // DBへ保存 (INSERT OR REPLACE)
-                    // 受付番号がある場合はそれをIDの種にするか、facility_name + date で管理するか検討が必要だが、
-                    // ここでは一旦単純化のために raw_mail_id または UUID を使用
                     await this.saveBooking(parsed, rawMailId);
 
                     // 個別ログ記録 (Success)
@@ -66,8 +72,10 @@ export class SyncOrchestrator {
 
                 } catch (err: any) {
                     console.error(`Error processing mail ${rawMailId}:`, err.message);
-                    // 個別ログ記録 (Error)
-                    await this.logEmailResult(runId, rawMailId, 'error', err.message);
+                    // 失敗した場合は、調査のために本文の一部または全部をログに含める
+                    const bodyInfo = detail ? (detail.body || detail.snippet) : 'No body available';
+                    const errorLogDetail = `${err.message} | Body: ${bodyInfo}`;
+                    await this.logEmailResult(runId, rawMailId, 'error', errorLogDetail);
                     errorCount++;
                 }
             }

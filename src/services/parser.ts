@@ -17,7 +17,7 @@ export class EmailParser {
     static parse(body: string): ParsedBooking | null {
         // 1. 各項目の抽出用正規表現
         const facilityRegex = /【施設室場】(.*)/;
-        const dateRegex = /【利用日時】(\d{4})年(\d{2})月(\d{2})日\(.\)(\d{2}:\d{2})～(\d{2}:\d{2})/;
+        const dateRegex = /【利用日時】(\d{4})年(\d{1,2})月(\d{1,2})日\(.\)(\d{1,2}:\d{2})～(\d{1,2}:\d{2})/;
         const regNoRegex = /【受付番号】([\d-]+)/;
         const purposeRegex = /【利用目的】(.*)/;
 
@@ -44,10 +44,10 @@ export class EmailParser {
         }
 
         const year = dateMatch[1];
-        const month = dateMatch[2];
-        const day = dateMatch[3];
-        const startTime = dateMatch[4];
-        const endTime = dateMatch[5];
+        const month = dateMatch[2].padStart(2, '0');
+        const day = dateMatch[3].padStart(2, '0');
+        const startTime = dateMatch[4].padStart(5, '0'); // H:mm -> 0H:mm
+        const endTime = dateMatch[5].padStart(5, '0');
 
         // ISO8601形式 (YYYY-MM-DD HH:mm) に変換
         const eventDate = `${year}-${month}-${day} ${startTime}`;
