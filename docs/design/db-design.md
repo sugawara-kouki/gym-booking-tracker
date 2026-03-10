@@ -28,17 +28,29 @@
 | `created_at` | INTEGER | DEFAULT (unixepoch()) | 登録日時 (Unix Epoch) |
 | `updated_at` | INTEGER | DEFAULT (unixepoch()) | 最終更新日時 (Unix Epoch) |
 
-### 2.2 `sync_logs` テーブル
-Gmail同期処理（Cron）の実行状態と結果を管理する。
+### 2.2 `sync_runs` テーブル
+Cron 実行ごとのサマリーを管理する。
 
 | カラム名 | 型 | 制約 | 説明 |
 | :--- | :--- | :--- | :--- |
 | `id` | TEXT | PRIMARY KEY | 一意識別子 (UUID) |
-| `sync_type` | TEXT | NOT NULL | 処理種別 (例: "gmail_polling") |
-| `status` | TEXT | NOT NULL | 実行結果 (success, error) |
-| `processed_count` | INTEGER | DEFAULT 0 | 処理（新規/更新）されたレコード数 |
-| `error_detail` | TEXT | - | エラー発生時の詳細メッセージ |
+| `status` | TEXT | NOT NULL | 全体結果 (success, partial_success, failure) |
+| `total_count` | INTEGER | DEFAULT 0 | 取得したメールの総数 |
+| `success_count` | INTEGER | DEFAULT 0 | 正常に完了した数 |
+| `error_count` | INTEGER | DEFAULT 0 | エラーが発生した数 |
 | `executed_at` | INTEGER | DEFAULT (unixepoch()) | 実行日時 (Unix Epoch) |
+
+### 2.3 `sync_logs` テーブル
+個別メールごとの処理結果を詳細に記録する。
+
+| カラム名 | 型 | 制約 | 説明 |
+| :--- | :--- | :--- | :--- |
+| `id` | TEXT | PRIMARY KEY | 一意識別子 (UUID) |
+| `sync_run_id` | TEXT | REFERENCES sync_runs(id) | 親となる実行ID |
+| `raw_mail_id` | TEXT | NOT NULL | 対象の Gmail メッセージ ID |
+| `status` | TEXT | NOT NULL | 個別結果 (success, parse_error, db_error) |
+| `error_detail` | TEXT | - | 失敗時のエラー内容詳細 |
+| `created_at` | INTEGER | DEFAULT (unixepoch()) | 記録日時 (Unix Epoch) |
 
 ---
 
