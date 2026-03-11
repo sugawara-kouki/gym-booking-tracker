@@ -17,6 +17,7 @@ app.get('/', (c) => {
 
 /**
  * PoC: Gmailからメール一覧を取得して返すテストエンドポイント
+ * 認可とAPIの疎通確認に使用
  */
 app.get('/poc/emails', async (c) => {
   try {
@@ -28,6 +29,7 @@ app.get('/poc/emails', async (c) => {
       data: messages
     })
   } catch (error: unknown) {
+    // エラーオブジェクトからメッセージを安全に抽出
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(error)
     return c.json({
@@ -39,6 +41,7 @@ app.get('/poc/emails', async (c) => {
 
 /**
  * PoC: D1 データベースへの接続テスト
+ * テーブルの読み取り権限とデータの存在確認に使用
  */
 app.get('/poc/db-test', async (c) => {
   try {
@@ -62,6 +65,7 @@ app.get('/poc/db-test', async (c) => {
 
 /**
  * PoC: 同期処理（SyncOrchestrator）の実行テスト
+ * 実際のフェッチ・パース・保存の一連の流れを確認に使用
  */
 app.get('/poc/sync', async (c) => {
   try {

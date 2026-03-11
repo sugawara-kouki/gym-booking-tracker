@@ -1,20 +1,32 @@
 import { z } from 'zod';
 
+/**
+ * Gmail APIのメッセージ（概要）を定義するスキーマ
+ */
 const GmailMessageSchema = z.object({
     id: z.string(),
     threadId: z.string(),
 });
 
+/**
+ * Gmail APIのメッセージ一覧レスポンス（messages.list）を定義するスキーマ
+ */
 const GmailMessageListResponseSchema = z.object({
     messages: z.array(GmailMessageSchema).optional(),
     nextPageToken: z.string().optional(),
     resultSizeEstimate: z.number().optional(),
 });
 
+/**
+ * Gmail APIのメッセージ詳細（messages.get）を定義するスキーマ
+ * 本文のパースに必要な最小限の構造を定義
+ */
 const GmailDetailsSchema = z.object({
     id: z.string(),
     snippet: z.string(),
     payload: z.object({
+        // Gmailのメール本文はパーツに分かれている場合（multipart）と
+        // 直接bodyに含まれる場合があるため、両方に対応
         parts: z.array(z.object({
             mimeType: z.string(),
             body: z.object({
@@ -29,6 +41,11 @@ const GmailDetailsSchema = z.object({
 
 export type GmailMessage = z.infer<typeof GmailMessageSchema>;
 
+/**
+ * Gmail APIへのアクセスを提供するサービス
+ * 
+ * @see https://developers.google.com/gmail/api/reference/rest
+ */
 export class GmailService {
     private clientId: string;
     private clientSecret: string;
@@ -41,7 +58,10 @@ export class GmailService {
     }
 
     /**
-     * リフレッシュトークンを使用してアクセストークンを取得する
+     * OAuth2 リフレッシュトークンを使用してアクセストークンを更新する
+     * 
+     * @returns 新しいアクセストークン
+     * @throws トークンの更新に失敗した場合
      */
     private async getAccessToken(): Promise<string> {
         const response = await fetch('https://oauth2.googleapis.com/token', {
@@ -67,7 +87,11 @@ export class GmailService {
     }
 
     /**
-     * メッセージ一覧を取得する（クエリ指定可能）
+     * 条件に一致するメッセージの一覧を取得する
+     * 
+     * @param maxResults 最大取得件数
+     * @param query 検索クエリ (Gmailの検索窓と同じ形式、例: "subject:Important")
+     * @returns メッセージ概要の配列
      */
     async listMessages(maxResults: number = 10, query: string = ''): Promise<GmailMessage[]> {
         const accessToken = await this.getAccessToken();
@@ -95,7 +119,12 @@ export class GmailService {
     }
 
     /**
-     * メッセージの詳細（本文を含む）を取得する
+     * メッセージの詳細情報を取得し、本文を解析する
+     * 
+     * Gmail APIのレスポンスから、プレーンテキスト形式の本文を優先的に抽出して返します。
+     * 
+     * @param messageId メッセージID
+     * @returns ID、スニペット、および（存在すれば）デコード済みの本文
      */
     async getMessage(messageId: string): Promise<{ id: string; snippet: string; body?: string }> {
         const accessToken = await this.getAccessToken();
@@ -115,7 +144,10 @@ export class GmailService {
         const json = await response.json();
         const data = GmailDetailsSchema.parse(json);
 
-        // Base64UrlをデコードしてUTF-8文字列に変換
+        /**
+         * APIから返されるBase64Url形式の文字列をデコードする
+         * 標準的なatobがデコードできない文字（-や_）を置換してから処理
+         */
         const decodeBase64 = (base64Url: string) => {
             const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
             const binString = atob(base64);
@@ -125,12 +157,13 @@ export class GmailService {
 
         let body = data.snippet;
         if (data.payload && data.payload.parts) {
-            // text/plain の部分を探す
+            // マルチパート形式の場合、解析のしやすさから 'text/plain' のパーツを優先的に探す
             const part = data.payload.parts.find((p) => p.mimeType === 'text/plain');
             if (part && part.body && part.body.data) {
                 body = decodeBase64(part.body.data);
             }
         } else if (data.payload && data.payload.body && data.payload.body.data) {
+            // シングルパートの場合
             body = decodeBase64(data.payload.body.data);
         }
 
