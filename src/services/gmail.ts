@@ -1,13 +1,33 @@
-export interface GmailMessage {
-    id: string;
-    threadId: string;
-}
+import { z } from 'zod';
 
-export interface GmailMessageListResponse {
-    messages?: GmailMessage[];
-    nextPageToken?: string;
-    resultSizeEstimate?: number;
-}
+const GmailMessageSchema = z.object({
+    id: z.string(),
+    threadId: z.string(),
+});
+
+const GmailMessageListResponseSchema = z.object({
+    messages: z.array(GmailMessageSchema).optional(),
+    nextPageToken: z.string().optional(),
+    resultSizeEstimate: z.number().optional(),
+});
+
+const GmailDetailsSchema = z.object({
+    id: z.string(),
+    snippet: z.string(),
+    payload: z.object({
+        parts: z.array(z.object({
+            mimeType: z.string(),
+            body: z.object({
+                data: z.string().optional(),
+            }).optional(),
+        })).optional(),
+        body: z.object({
+            data: z.string().optional(),
+        }).optional(),
+    }).optional(),
+});
+
+export type GmailMessage = z.infer<typeof GmailMessageSchema>;
 
 export class GmailService {
     private clientId: string;
@@ -41,8 +61,9 @@ export class GmailService {
             throw new Error(`Failed to refresh access token: ${response.status} ${errorText}`);
         }
 
-        const data = await response.json() as { access_token: string };
-        return data.access_token;
+        const data = await response.json();
+        const result = z.object({ access_token: z.string() }).parse(data);
+        return result.access_token;
     }
 
     /**
@@ -68,8 +89,9 @@ export class GmailService {
             throw new Error(`Failed to fetch messages: ${error}`);
         }
 
-        const data = await response.json() as GmailMessageListResponse;
-        return data.messages || [];
+        const data = await response.json();
+        const parsed = GmailMessageListResponseSchema.parse(data);
+        return parsed.messages || [];
     }
 
     /**
@@ -90,7 +112,8 @@ export class GmailService {
             throw new Error(`Failed to fetch message ${messageId}: ${error}`);
         }
 
-        const data = await response.json() as any;
+        const json = await response.json();
+        const data = GmailDetailsSchema.parse(json);
 
         // Base64UrlをデコードしてUTF-8文字列に変換
         const decodeBase64 = (base64Url: string) => {
@@ -103,7 +126,7 @@ export class GmailService {
         let body = data.snippet;
         if (data.payload && data.payload.parts) {
             // text/plain の部分を探す
-            const part = data.payload.parts.find((p: any) => p.mimeType === 'text/plain');
+            const part = data.payload.parts.find((p) => p.mimeType === 'text/plain');
             if (part && part.body && part.body.data) {
                 body = decodeBase64(part.body.data);
             }

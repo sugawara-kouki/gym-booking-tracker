@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { GmailService } from './services/gmail'
 import { SyncOrchestrator } from './services/sync-orchestrator'
 
-type Bindings = {
+export type Bindings = {
   GOOGLE_CLIENT_ID: string
   GOOGLE_CLIENT_SECRET: string
   GOOGLE_REFRESH_TOKEN: string
@@ -27,11 +27,12 @@ app.get('/poc/emails', async (c) => {
       success: true,
       data: messages
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(error)
     return c.json({
       success: false,
-      error: error.message
+      error: errorMessage
     }, 500)
   }
 })
@@ -49,11 +50,12 @@ app.get('/poc/db-test', async (c) => {
       message: 'D1 Connection Successful',
       data: results
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(error)
     return c.json({
       success: false,
-      error: error.message
+      error: errorMessage
     }, 500)
   }
 })
@@ -71,11 +73,12 @@ app.get('/poc/sync', async (c) => {
       message: 'Sync completed',
       data: result
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(error)
     return c.json({
       success: false,
-      error: error.message
+      error: errorMessage
     }, 500)
   }
 })

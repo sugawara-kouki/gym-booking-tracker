@@ -1,5 +1,6 @@
 import { GmailService } from './gmail';
 import { EmailParser, ParsedBooking } from './parser';
+import { Bindings } from '../index';
 
 export interface SyncConfig {
     labelIds?: string[];
@@ -7,7 +8,7 @@ export interface SyncConfig {
 }
 
 export class SyncOrchestrator {
-    constructor(private env: any) { }
+    constructor(private env: Bindings) { }
 
     /**
      * Gmailと同期してデータベースを更新するメイン処理
@@ -29,7 +30,7 @@ export class SyncOrchestrator {
 
         try {
             // 2. メッセージ一覧の取得
-            const limit = 500;
+            const limit = 10;
             const query = 'subject:"札幌市公共施設予約情報システム"';
             console.log(`[Sync] Fetching up to ${limit} messages with query: ${query}`);
             const messages = await gmail.listMessages(limit, query);
@@ -48,7 +49,7 @@ export class SyncOrchestrator {
                 if (processed % 10 === 0) {
                     console.log(`[Sync] Progress: ${processed}/${totalCount}...`);
                 }
-                let detail: any = null;
+                let detail: { id: string; snippet: string; body?: string } | null = null;
                 try {
                     // 詳細（本文）を取得
                     detail = await gmail.getMessage(rawMailId);
@@ -70,11 +71,12 @@ export class SyncOrchestrator {
                     await this.logEmailResult(runId, rawMailId, 'success');
                     successCount++;
 
-                } catch (err: any) {
-                    console.error(`Error processing mail ${rawMailId}:`, err.message);
+                } catch (err: unknown) {
+                    const errorMessage = err instanceof Error ? err.message : String(err);
+                    console.error(`Error processing mail ${rawMailId}:`, errorMessage);
                     // 失敗した場合は、調査のために本文の一部または全部をログに含める
                     const bodyInfo = detail ? (detail.body || detail.snippet) : 'No body available';
-                    const errorLogDetail = `${err.message} | Body: ${bodyInfo}`;
+                    const errorLogDetail = `${errorMessage} | Body: ${bodyInfo}`;
                     await this.logEmailResult(runId, rawMailId, 'error', errorLogDetail);
                     errorCount++;
                 }
@@ -90,7 +92,7 @@ export class SyncOrchestrator {
 
             return { runId, success: true };
 
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Fatal error in sync orchestrator:', err);
             await db.prepare("UPDATE sync_runs SET status = 'failure' WHERE id = ?")
                 .bind(runId).run();
