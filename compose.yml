@@ -1,0 +1,10 @@
+services:
+  swagger-ui:
+    image: swaggerapi/swagger-ui
+    container_name: gym-booking-swagger
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./docs/openapi.yaml:/app/openapi.yaml
+    environment:
+      SWAGGER_JSON: /app/openapi.yaml
