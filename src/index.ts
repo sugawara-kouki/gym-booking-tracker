@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { cors } from 'hono/cors'
 import { GmailService } from './services/gmail'
 import { SyncOrchestrator } from './services/sync-orchestrator'
 
@@ -10,6 +11,12 @@ export type Bindings = {
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
+
+// Swagger UI (localhost:8080) からのリクエストを許可するためのCORS設定
+app.use('*', cors({
+  origin: 'http://localhost:8080',
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+}))
 
 app.get('/', (c) => {
   return c.text('Gym Booking Tracker API')
