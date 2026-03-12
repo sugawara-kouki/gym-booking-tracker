@@ -25,6 +25,10 @@ const GmailDetailsSchema = z.object({
     id: z.string(),
     snippet: z.string(),
     payload: z.object({
+        headers: z.array(z.object({
+            name: z.string(),
+            value: z.string(),
+        })).optional(),
         // Gmailのメール本文はパーツに分かれている場合（multipart）と
         // 直接bodyに含まれる場合があるため、両方に対応
         parts: z.array(z.object({
@@ -37,6 +41,7 @@ const GmailDetailsSchema = z.object({
             data: z.string().optional(),
         }).optional(),
     }).optional(),
+    threadId: z.string(),
 });
 
 export type GmailMessage = z.infer<typeof GmailMessageSchema>;
@@ -90,16 +95,20 @@ export class GmailService {
      * 条件に一致するメッセージの一覧を取得する
      * 
      * @param maxResults 最大取得件数
-     * @param query 検索クエリ (Gmailの検索窓と同じ形式、例: "subject:Important")
-     * @returns メッセージ概要の配列
+     * @param query 検索クエリ
+     * @param pageToken ページング用トークン
+     * @returns メッセージ概要の配列と次のページトークン
      */
-    async listMessages(maxResults: number = 10, query: string = ''): Promise<GmailMessage[]> {
+    async listMessages(maxResults: number = 10, query: string = '', pageToken?: string): Promise<{ messages: GmailMessage[]; nextPageToken?: string }> {
         const accessToken = await this.getAccessToken();
 
         const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages');
         url.searchParams.set('maxResults', maxResults.toString());
         if (query) {
             url.searchParams.set('q', query);
+        }
+        if (pageToken) {
+            url.searchParams.set('pageToken', pageToken);
         }
 
         const response = await fetch(url.toString(), {
@@ -115,7 +124,10 @@ export class GmailService {
 
         const data = await response.json();
         const parsed = GmailMessageListResponseSchema.parse(data);
-        return parsed.messages || [];
+        return {
+            messages: parsed.messages || [],
+            nextPageToken: parsed.nextPageToken
+        };
     }
 
     /**
@@ -126,7 +138,7 @@ export class GmailService {
      * @param messageId メッセージID
      * @returns ID、スニペット、および（存在すれば）デコード済みの本文
      */
-    async getMessage(messageId: string): Promise<{ id: string; snippet: string; body?: string }> {
+    async getMessage(messageId: string): Promise<{ id: string; threadId: string; subject: string; snippet: string; body?: string }> {
         const accessToken = await this.getAccessToken();
 
         const url = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}`;
@@ -167,8 +179,14 @@ export class GmailService {
             body = decodeBase64(data.payload.body.data);
         }
 
+        const headers = data.payload?.headers || [];
+        const subjectHeader = headers.find((h: { name: string; value: string }) => h.name.toLowerCase() === 'subject');
+        const subject = subjectHeader ? subjectHeader.value : '';
+
         return {
             id: data.id,
+            threadId: data.threadId,
+            subject: subject,
             snippet: data.snippet,
             body: body
         };
