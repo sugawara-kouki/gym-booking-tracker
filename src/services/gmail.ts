@@ -47,14 +47,26 @@ const GmailDetailsSchema = z.object({
 export type GmailMessage = z.infer<typeof GmailMessageSchema>;
 
 /**
+ * Gmail APIから取得したメッセージ詳細の基本情報
+ */
+export interface GmailMessageInfo {
+    id: string;
+    threadId: string;
+    subject: string;
+    snippet: string;
+    body: string;
+}
+
+/**
  * Gmail APIへのアクセスを提供するサービス
  * 
+ * OAuth2認証を使用してメッセージの取得や詳細の解析を行います。
  * @see https://developers.google.com/gmail/api/reference/rest
  */
 export class GmailService {
-    private clientId: string;
-    private clientSecret: string;
-    private refreshToken: string;
+    private readonly clientId: string;
+    private readonly clientSecret: string;
+    private readonly refreshToken: string;
 
     constructor(env: { GOOGLE_CLIENT_ID: string; GOOGLE_CLIENT_SECRET: string; GOOGLE_REFRESH_TOKEN: string }) {
         this.clientId = env.GOOGLE_CLIENT_ID;
@@ -64,9 +76,6 @@ export class GmailService {
 
     /**
      * OAuth2 リフレッシュトークンを使用してアクセストークンを更新する
-     * 
-     * @returns 新しいアクセストークン
-     * @throws トークンの更新に失敗した場合
      */
     private async getAccessToken(): Promise<string> {
         const response = await fetch('https://oauth2.googleapis.com/token', {
@@ -82,39 +91,31 @@ export class GmailService {
 
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('Gmail API Error Response:', errorText);
             throw new Error(`Failed to refresh access token: ${response.status} ${errorText}`);
         }
 
         const data = await response.json();
-        const result = z.object({ access_token: z.string() }).parse(data);
-        return result.access_token;
+        const { access_token } = z.object({ access_token: z.string() }).parse(data);
+        return access_token;
     }
 
     /**
      * 条件に一致するメッセージの一覧を取得する
      * 
-     * @param maxResults 最大取得件数
+     * @param maxResults 1ページあたりの取得件数
      * @param query 検索クエリ
      * @param pageToken ページング用トークン
-     * @returns メッセージ概要の配列と次のページトークン
      */
     async listMessages(maxResults: number = 10, query: string = '', pageToken?: string): Promise<{ messages: GmailMessage[]; nextPageToken?: string }> {
         const accessToken = await this.getAccessToken();
-
         const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages');
+
         url.searchParams.set('maxResults', maxResults.toString());
-        if (query) {
-            url.searchParams.set('q', query);
-        }
-        if (pageToken) {
-            url.searchParams.set('pageToken', pageToken);
-        }
+        if (query) url.searchParams.set('q', query);
+        if (pageToken) url.searchParams.set('pageToken', pageToken);
 
         const response = await fetch(url.toString(), {
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-            },
+            headers: { Authorization: `Bearer ${accessToken}` },
         });
 
         if (!response.ok) {
@@ -124,6 +125,7 @@ export class GmailService {
 
         const data = await response.json();
         const parsed = GmailMessageListResponseSchema.parse(data);
+
         return {
             messages: parsed.messages || [],
             nextPageToken: parsed.nextPageToken
@@ -131,21 +133,16 @@ export class GmailService {
     }
 
     /**
-     * メッセージの詳細情報を取得し、本文を解析する
-     * 
-     * Gmail APIのレスポンスから、プレーンテキスト形式の本文を優先的に抽出して返します。
+     * メッセージの詳細情報を取得し、本文と件名を抽出する
      * 
      * @param messageId メッセージID
-     * @returns ID、スニペット、および（存在すれば）デコード済みの本文
      */
-    async getMessage(messageId: string): Promise<{ id: string; threadId: string; subject: string; snippet: string; body?: string }> {
+    async getMessage(messageId: string): Promise<GmailMessageInfo> {
         const accessToken = await this.getAccessToken();
-
         const url = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}`;
+
         const response = await fetch(url, {
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-            },
+            headers: { Authorization: `Bearer ${accessToken}` },
         });
 
         if (!response.ok) {
@@ -156,39 +153,52 @@ export class GmailService {
         const json = await response.json();
         const data = GmailDetailsSchema.parse(json);
 
-        /**
-         * APIから返されるBase64Url形式の文字列をデコードする
-         * 標準的なatobがデコードできない文字（-や_）を置換してから処理
-         */
-        const decodeBase64 = (base64Url: string) => {
-            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-            const binString = atob(base64);
-            const bytes = Uint8Array.from(binString, (m) => m.codePointAt(0)!);
-            return new TextDecoder().decode(bytes);
-        };
+        // 本文の抽出（プレーンテキストを優先）
+        const body = this.extractBody(data);
 
-        let body = data.snippet;
-        if (data.payload && data.payload.parts) {
-            // マルチパート形式の場合、解析のしやすさから 'text/plain' のパーツを優先的に探す
-            const part = data.payload.parts.find((p) => p.mimeType === 'text/plain');
-            if (part && part.body && part.body.data) {
-                body = decodeBase64(part.body.data);
-            }
-        } else if (data.payload && data.payload.body && data.payload.body.data) {
-            // シングルパートの場合
-            body = decodeBase64(data.payload.body.data);
-        }
-
+        // ヘッダーから件名を抽出
         const headers = data.payload?.headers || [];
-        const subjectHeader = headers.find((h: { name: string; value: string }) => h.name.toLowerCase() === 'subject');
-        const subject = subjectHeader ? subjectHeader.value : '';
+        const subject = headers.find(h => h.name.toLowerCase() === 'subject')?.value || '(No Subject)';
 
         return {
             id: data.id,
             threadId: data.threadId,
-            subject: subject,
+            subject,
             snippet: data.snippet,
-            body: body
+            body
         };
+    }
+
+    /**
+     * Gmailペイロードから本文をデコードして抽出する
+     */
+    private extractBody(data: z.infer<typeof GmailDetailsSchema>): string {
+        const { payload, snippet } = data;
+        if (!payload) return snippet;
+
+        // マルチパートの場合 'text/plain' を探す
+        if (payload.parts) {
+            const textPart = payload.parts.find(p => p.mimeType === 'text/plain');
+            if (textPart?.body?.data) {
+                return this.decodeBase64Url(textPart.body.data);
+            }
+        }
+
+        // シングルパートの場合
+        if (payload.body?.data) {
+            return this.decodeBase64Url(payload.body.data);
+        }
+
+        return snippet;
+    }
+
+    /**
+     * Gmail API固有の Base64Url 形式を文字列にデコードする
+     */
+    private decodeBase64Url(base64Url: string): string {
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const binString = atob(base64);
+        const bytes = Uint8Array.from(binString, (m) => m.codePointAt(0)!);
+        return new TextDecoder().decode(bytes);
     }
 }

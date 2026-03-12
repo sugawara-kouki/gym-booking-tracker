@@ -3,6 +3,30 @@ import { EmailParser, ParsedBooking } from './parser';
 import { Bindings } from '../index';
 
 /**
+ * メール解析ステータスの定数
+ */
+export const PARSE_STATUS = {
+    PENDING: 'pending',
+    SUCCESS: 'success',
+    FAIL: 'fail',
+    SKIPPED: 'skipped',
+} as const;
+
+export type ParseStatus = typeof PARSE_STATUS[keyof typeof PARSE_STATUS];
+
+/**
+ * 同期実行ステータスの定数
+ */
+export const SYNC_RUN_STATUS = {
+    RUNNING: 'running',
+    SUCCESS: 'success',
+    PARTIAL_SUCCESS: 'partial_success',
+    FAILURE: 'failure',
+} as const;
+
+export type SyncRunStatus = typeof SYNC_RUN_STATUS[keyof typeof SYNC_RUN_STATUS];
+
+/**
  * 同期設定のインターフェース
  */
 export interface SyncConfig {
@@ -11,10 +35,25 @@ export interface SyncConfig {
 }
 
 /**
+ * D1 データベースの各テーブル行の型定義
+ */
+interface RawEmailRow {
+    id: string;
+    thread_id: string;
+    subject: string;
+    snippet: string;
+    body: string | null;
+    parse_status: ParseStatus;
+}
+
+/**
  * Gmailからのデータ取得、解析、データベース保存を制御するクラス
  */
 export class SyncOrchestrator {
-    constructor(private env: Bindings) { }
+    private readonly DB_BATCH_SIZE = 5;
+    private readonly GMAIL_QUERY = 'subject:"札幌市公共施設予約情報システム"';
+
+    constructor(private readonly env: Bindings) { }
 
     /**
      * Gmailと同期してデータベースを更新するメイン処理
@@ -24,38 +63,49 @@ export class SyncOrchestrator {
         const db = this.env.gym_booking_db;
 
         // 1. 同期実行の開始を記録
-        await db.prepare(`
-            INSERT INTO sync_runs (id, status, total_count, success_count, error_count)
-            VALUES (?, 'running', 0, 0, 0)
-        `).bind(runId).run();
+        await this.initSyncRun(runId);
 
         try {
-            // Step 1: Ingest from Gmail to raw_emails
+            // Step 1: Gmailから未取得メールを取り込む
             const { count: ingestedCount } = await this.ingest();
 
-            // total_count を更新（取り込み件数ではなく、全体の処理対象数として一旦更新）
+            // 処理対象件数を更新
             await db.prepare('UPDATE sync_runs SET total_count = ? WHERE id = ?')
                 .bind(ingestedCount, runId).run();
 
-            // Step 2: Process Pending emails
+            // Step 2: 取り込んだ未処理メールを解析する
             const { successCount, errorCount } = await this.processPending(runId);
 
-            // 4. 同期全体のステータスを更新して完了
-            const finalStatus = errorCount === 0 ? 'success' : (successCount > 0 ? 'partial_success' : 'failure');
-            await db.prepare(`
-                UPDATE sync_runs 
-                SET status = ?, success_count = ?, error_count = ?, executed_at = unixepoch()
-                WHERE id = ?
-            `).bind(finalStatus, successCount, errorCount, runId).run();
+            // 4. 同期全体の最終ステータスを確定
+            await this.finalizeSyncRun(runId, successCount, errorCount);
 
             return { runId, success: true };
 
         } catch (err: unknown) {
             console.error('Fatal error in sync orchestrator:', err);
-            await db.prepare("UPDATE sync_runs SET status = 'failure' WHERE id = ?")
-                .bind(runId).run();
+            await db.prepare("UPDATE sync_runs SET status = ? WHERE id = ?")
+                .bind(SYNC_RUN_STATUS.FAILURE, runId).run();
             return { runId, success: false };
         }
+    }
+
+    private async initSyncRun(runId: string) {
+        await this.env.gym_booking_db.prepare(`
+            INSERT INTO sync_runs (id, status, total_count, success_count, error_count)
+            VALUES (?, ?, 0, 0, 0)
+        `).bind(runId, SYNC_RUN_STATUS.RUNNING).run();
+    }
+
+    private async finalizeSyncRun(runId: string, successCount: number, errorCount: number) {
+        const finalStatus = errorCount === 0
+            ? SYNC_RUN_STATUS.SUCCESS
+            : (successCount > 0 ? SYNC_RUN_STATUS.PARTIAL_SUCCESS : SYNC_RUN_STATUS.FAILURE);
+
+        await this.env.gym_booking_db.prepare(`
+            UPDATE sync_runs 
+            SET status = ?, success_count = ?, error_count = ?, executed_at = unixepoch()
+            WHERE id = ?
+        `).bind(finalStatus, successCount, errorCount, runId).run();
     }
 
     /**
@@ -110,13 +160,14 @@ export class SyncOrchestrator {
                             const detail = await gmail.getMessage(msg.id);
                             await db.prepare(`
                                 INSERT INTO raw_emails (id, thread_id, subject, snippet, body, fetched_at, parse_status)
-                                VALUES (?, ?, ?, ?, ?, unixepoch(), 'pending')
+                                VALUES (?, ?, ?, ?, ?, unixepoch(), ?)
                             `).bind(
                                 detail.id,
                                 detail.threadId,
                                 detail.subject,
                                 detail.snippet,
-                                detail.body || null
+                                detail.body || null,
+                                PARSE_STATUS.PENDING
                             ).run();
                             ingested++;
                         } catch (err) {
@@ -148,44 +199,55 @@ export class SyncOrchestrator {
      */
     async processPending(runId: string): Promise<{ successCount: number; errorCount: number }> {
         const db = this.env.gym_booking_db;
-        // 未処理(pending)または失敗(fail)したレコードを対象にする
-        const pending = await db.prepare("SELECT * FROM raw_emails WHERE parse_status IN ('pending', 'fail')").all();
-
-        let successCount = 0;
-        let errorCount = 0;
-        const results = pending.results as any[];
+        const { results } = await db.prepare("SELECT * FROM raw_emails WHERE parse_status IN (?, ?)")
+            .bind(PARSE_STATUS.PENDING, PARSE_STATUS.FAIL)
+            .all<RawEmailRow>();
 
         console.log(`[Process] Found ${results.length} emails to process.`);
 
+        let successCount = 0;
+        let errorCount = 0;
+
         for (const row of results) {
-            const rawMailId = row.id;
-            const body = row.body || row.snippet;
-
-            try {
-                const parsed = EmailParser.parse(body);
-                if (!parsed) {
-                    throw new Error('Parse failed: Invalid format or unsupported facility');
-                }
-
-                await this.saveBooking(parsed, rawMailId);
-
-                // 元データのステータスを更新
-                await db.prepare("UPDATE raw_emails SET parse_status = 'success' WHERE id = ?").bind(rawMailId).run();
-                await this.logEmailResult(runId, rawMailId, 'success');
-                successCount++;
-
-            } catch (err: unknown) {
-                const errorMessage = err instanceof Error ? err.message : String(err);
-                console.error(`[Process] Error for mail ${rawMailId}:`, errorMessage);
-
-                await db.prepare("UPDATE raw_emails SET parse_status = 'fail' WHERE id = ?").bind(rawMailId).run();
-                const errorLogDetail = `${errorMessage} | Body Snippet: ${body.substring(0, 200)}`;
-                await this.logEmailResult(runId, rawMailId, 'error', errorLogDetail);
-                errorCount++;
-            }
+            const isSuccess = await this.parseAndSaveRow(runId, row);
+            if (isSuccess) successCount++; else errorCount++;
         }
 
         return { successCount, errorCount };
+    }
+
+    /**
+     * 1行の生データを解析・保存し、ステータスを更新する
+     */
+    private async parseAndSaveRow(runId: string, row: RawEmailRow): Promise<boolean> {
+        const db = this.env.gym_booking_db;
+        const content = row.body || row.snippet;
+
+        try {
+            const parsed = EmailParser.parse(content);
+
+            // 解析結果が null の場合は「対象外メール」としてマーク
+            if (!parsed) {
+                await db.prepare("UPDATE raw_emails SET parse_status = ? WHERE id = ?")
+                    .bind(PARSE_STATUS.SKIPPED, row.id).run();
+                return true; // 処理自体は正常終了扱い
+            }
+
+            await this.saveBooking(parsed, row.id);
+            await db.prepare("UPDATE raw_emails SET parse_status = ? WHERE id = ?")
+                .bind(PARSE_STATUS.SUCCESS, row.id).run();
+            await this.logEmailResult(runId, row.id, PARSE_STATUS.SUCCESS);
+            return true;
+
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(`[Process] Error for mail ${row.id}:`, msg);
+
+            await db.prepare("UPDATE raw_emails SET parse_status = ? WHERE id = ?")
+                .bind(PARSE_STATUS.FAIL, row.id).run();
+            await this.logEmailResult(runId, row.id, 'error', `${msg} | Snippet: ${content.substring(0, 100)}`);
+            return false;
+        }
     }
 
     /**
