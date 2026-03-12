@@ -87,6 +87,7 @@ export class EmailParser {
         if (body.includes('抽選に当選されました')) return BOOKING_STATUS.WON;
         if (body.includes('利用申込の手続きを完了')) return BOOKING_STATUS.CONFIRMED;
         if (body.includes('キャンセル')) return BOOKING_STATUS.CANCELLED;
+
         return BOOKING_STATUS.APPLIED; // デフォルトまたは「抽選申込を受付けました」
     }
 

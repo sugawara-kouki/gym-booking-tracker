@@ -1,5 +1,5 @@
 import { GmailService } from './gmail';
-import { EmailParser, ParsedBooking } from './parser';
+import { BOOKING_STATUS, EmailParser, ParsedBooking } from './parser';
 import { Bindings } from '../index';
 
 /**
@@ -199,11 +199,11 @@ export class SyncOrchestrator {
      */
     async processPending(runId: string): Promise<{ successCount: number; errorCount: number }> {
         const db = this.env.gym_booking_db;
-        const { results } = await db.prepare("SELECT * FROM raw_emails WHERE parse_status IN (?, ?)")
+        const { results } = await db.prepare("SELECT * FROM raw_emails WHERE parse_status IN (?, ?) ORDER BY fetched_at ASC")
             .bind(PARSE_STATUS.PENDING, PARSE_STATUS.FAIL)
             .all<RawEmailRow>();
 
-        console.log(`[Process] Found ${results.length} emails to process.`);
+        console.log(`[Process] Found ${results.length} emails to process (Chronological order).`);
 
         let successCount = 0;
         let errorCount = 0;
@@ -225,63 +225,67 @@ export class SyncOrchestrator {
 
         try {
             const parsed = EmailParser.parse(content, row.subject);
-            console.log(`[Process] Parse result for ${row.id}: ${parsed ? `Success (Status: ${parsed.status})` : 'Failed (null)'}`);
 
             // 解析結果が null の場合は「対象外メール」としてマーク
             if (!parsed) {
                 await db.prepare("UPDATE raw_emails SET parse_status = ? WHERE id = ?")
                     .bind(PARSE_STATUS.SKIPPED, row.id).run();
-                return true; // 処理自体は正常終了扱い
+                return true;
             }
 
             await this.saveBooking(parsed, row.id);
             await db.prepare("UPDATE raw_emails SET parse_status = ? WHERE id = ?")
                 .bind(PARSE_STATUS.SUCCESS, row.id).run();
-            await this.logEmailResult(runId, row.id, PARSE_STATUS.SUCCESS);
+            await this.logEmailResult(runId, row.id, PARSE_STATUS.SUCCESS, `Status: ${parsed.status}`);
             return true;
 
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : String(err);
-            console.error(`[Process] Error for mail ${row.id}:`, msg);
-
             await db.prepare("UPDATE raw_emails SET parse_status = ? WHERE id = ?")
                 .bind(PARSE_STATUS.FAIL, row.id).run();
-            await this.logEmailResult(runId, row.id, 'error', `${msg} | Snippet: ${content.substring(0, 100)}`);
+            await this.logEmailResult(runId, row.id, 'error', `FAIL: ${msg}`);
             return false;
         }
     }
 
     /**
      * 予約情報を bookings テーブルに保存する
-     * 受付番号（id）またはメールIDが重複している場合は、最新の情報で上書き（ステータス更新）を行う
-     * 
-     * @param booking 解析済みの予約情報
-     * @param rawMailId 元となったメールID
      */
     private async saveBooking(booking: ParsedBooking, rawMailId: string) {
         const db = this.env.gym_booking_db;
         const id = booking.registration_number || crypto.randomUUID();
 
+        // status の上書きガード: won または confirmed の場合は applied で上書きしない
+        // 定数もパラメータとして渡すことで SQL 側をクリーンに保つ
         await db.prepare(`
       INSERT INTO bookings (
         id, facility_name, event_date, event_end_date, 
         registration_number, purpose, status, raw_mail_id, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, unixepoch())
       ON CONFLICT(raw_mail_id) DO UPDATE SET
-        status = excluded.status,
+        status = CASE 
+          WHEN excluded.status = ?9 AND status IN (?10, ?11) THEN status
+          ELSE excluded.status
+        END,
         updated_at = unixepoch()
       ON CONFLICT(id) DO UPDATE SET
-        status = excluded.status,
+        status = CASE 
+          WHEN excluded.status = ?9 AND status IN (?10, ?11) THEN status
+          ELSE excluded.status
+        END,
         updated_at = unixepoch()
     `).bind(
-            id,
-            booking.facility_name,
-            booking.event_date,
-            booking.event_end_date || null,
-            booking.registration_number || null,
-            booking.purpose || null,
-            booking.status,
-            rawMailId
+            id,                     // ?1
+            booking.facility_name,  // ?2
+            booking.event_date,      // ?3
+            booking.event_end_date || null, // ?4
+            booking.registration_number || null, // ?5
+            booking.purpose || null, // ?6
+            booking.status,         // ?7
+            rawMailId,              // ?8
+            BOOKING_STATUS.APPLIED, // ?9
+            BOOKING_STATUS.WON,     // ?10
+            BOOKING_STATUS.CONFIRMED // ?11
         ).run();
     }
 
