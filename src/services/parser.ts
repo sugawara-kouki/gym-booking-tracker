@@ -42,9 +42,10 @@ export class EmailParser {
      * メールのテキスト内容を解析して予約情報を抽出する
      * 
      * @param body メールの本文テキスト
+     * @param subject メールの件名（任意）
      * @returns 解析結果。必須項目（施設、日時）が欠けている場合は null
      */
-    static parse(body: string): ParsedBooking | null {
+    static parse(body: string, subject?: string): ParsedBooking | null {
         // 1. 各項目の抽出実行
         const facilityMatch = body.match(this.FACILITY_REGEX);
         const dateMatch = body.match(this.DATE_REGEX);
@@ -55,7 +56,7 @@ export class EmailParser {
         }
 
         // 2. ステータスの推論
-        const status = this.determineStatus(body);
+        const status = this.determineStatus(body, subject);
 
         // 3. 日時情報の整形
         const { eventDate, eventEndDate } = this.formatDateRange(dateMatch);
@@ -75,9 +76,14 @@ export class EmailParser {
     }
 
     /**
-     * 本文内容から予約ステータスを判定する
+     * 本文または件名の内容から予約ステータスを判定する
      */
-    private static determineStatus(body: string): BookingStatus {
+    private static determineStatus(body: string, subject?: string): BookingStatus {
+        // 件名に「当選」が含まれる場合は最優先で WON 判定
+        if (subject?.includes('抽選申込当選のお知らせ') || subject?.includes('当選')) {
+            return BOOKING_STATUS.WON;
+        }
+
         if (body.includes('抽選に当選されました')) return BOOKING_STATUS.WON;
         if (body.includes('利用申込の手続きを完了')) return BOOKING_STATUS.CONFIRMED;
         if (body.includes('キャンセル')) return BOOKING_STATUS.CANCELLED;

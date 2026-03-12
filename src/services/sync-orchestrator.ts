@@ -224,7 +224,8 @@ export class SyncOrchestrator {
         const content = row.body || row.snippet;
 
         try {
-            const parsed = EmailParser.parse(content);
+            const parsed = EmailParser.parse(content, row.subject);
+            console.log(`[Process] Parse result for ${row.id}: ${parsed ? `Success (Status: ${parsed.status})` : 'Failed (null)'}`);
 
             // 解析結果が null の場合は「対象外メール」としてマーク
             if (!parsed) {
