@@ -1,6 +1,7 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { GmailService } from '../services/gmail'
-import { SyncOrchestrator } from '../services/sync-orchestrator'
+import { SyncOrchestrator, SYNC_RUN_STATUS } from '../services/sync-orchestrator'
+import { createRepositories } from '../repositories'
 import type { Bindings } from '../index'
 
 export const poc = new OpenAPIHono<{ Bindings: Bindings }>()
@@ -145,13 +146,14 @@ poc.openapi(emailsRoute, async (c) => {
 
 poc.openapi(dbClearRoute, async (c) => {
   try {
-    const db = c.env.gym_booking_db
-    await db.batch([
-      db.prepare('DELETE FROM sync_logs'),
-      db.prepare('DELETE FROM sync_runs'),
-      db.prepare('DELETE FROM bookings'),
-      db.prepare('DELETE FROM raw_emails')
-    ])
+    const repos = createRepositories(c.env.gym_booking_db)
+    
+    // 外部キー制約を考慮した順序、または一度オフにして削除
+    // 直列で削除を実行するように変更 (以前のbatch相当)
+    await repos.syncLogs.deleteAll()
+    await repos.syncRuns.deleteAll()
+    await repos.bookings.deleteAll()
+    await repos.rawEmails.deleteAll()
 
     return c.json({
       success: true as const,
@@ -169,8 +171,8 @@ poc.openapi(dbClearRoute, async (c) => {
 
 poc.openapi(dbTestRoute, async (c) => {
   try {
-    const db = c.env.gym_booking_db
-    const results = await db.prepare('SELECT * FROM bookings').all()
+    const repos = createRepositories(c.env.gym_booking_db)
+    const results = await repos.bookings.findAll()
 
     return c.json({
       success: true as const,
@@ -210,22 +212,15 @@ poc.openapi(ingestRoute, async (c) => {
 poc.openapi(parsePendingRoute, async (c) => {
   try {
     const orchestrator = new SyncOrchestrator(c.env)
+    const repos = createRepositories(c.env.gym_booking_db)
     const runId = crypto.randomUUID()
-    const db = c.env.gym_booking_db
 
-    await db.prepare(`
-      INSERT INTO sync_runs (id, status, total_count, success_count, error_count)
-      VALUES (?, 'running_manual', 0, 0, 0)
-    `).bind(runId).run()
+    await repos.syncRuns.create(runId)
 
     const result = await orchestrator.processPending(runId)
 
-    const finalStatus = result.errorCount === 0 ? 'success' : 'partial_success'
-    await db.prepare(`
-      UPDATE sync_runs 
-      SET status = ?, success_count = ?, error_count = ?, executed_at = unixepoch()
-      WHERE id = ?
-    `).bind(finalStatus, result.successCount, result.errorCount, runId).run()
+    const finalStatus = result.errorCount === 0 ? SYNC_RUN_STATUS.SUCCESS : SYNC_RUN_STATUS.PARTIAL_SUCCESS
+    await repos.syncRuns.finalize(runId, finalStatus, result.successCount, result.errorCount)
 
     return c.json({
       success: true as const,

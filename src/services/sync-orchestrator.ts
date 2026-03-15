@@ -1,6 +1,8 @@
 import { GmailService } from './gmail';
 import { BOOKING_STATUS, EmailParser, ParsedBooking } from './parser';
 import { Bindings } from '../index';
+import { createRepositories, Repositories } from '../repositories';
+import { RawEmailRow } from '../repositories/types';
 
 /**
  * メール解析ステータスの定数
@@ -34,17 +36,6 @@ export interface SyncConfig {
     maxResults?: number;
 }
 
-/**
- * D1 データベースの各テーブル行の型定義
- */
-interface RawEmailRow {
-    id: string;
-    thread_id: string;
-    subject: string;
-    snippet: string;
-    body: string | null;
-    parse_status: ParseStatus;
-}
 
 /**
  * Gmailからのデータ取得、解析、データベース保存を制御するクラス
@@ -52,15 +43,17 @@ interface RawEmailRow {
 export class SyncOrchestrator {
     private readonly DB_BATCH_SIZE = 5;
     private readonly GMAIL_QUERY = 'subject:"札幌市公共施設予約情報システム"';
+    private readonly repos: Repositories;
 
-    constructor(private readonly env: Bindings) { }
+    constructor(private readonly env: Bindings) { 
+        this.repos = createRepositories(env.gym_booking_db);
+    }
 
     /**
      * Gmailと同期してデータベースを更新するメイン処理
      */
     async sync(): Promise<{ runId: string; success: boolean }> {
         const runId = crypto.randomUUID();
-        const db = this.env.gym_booking_db;
 
         // 1. 同期実行の開始を記録
         await this.initSyncRun(runId);
@@ -70,8 +63,7 @@ export class SyncOrchestrator {
             const { count: ingestedCount } = await this.ingest();
 
             // 処理対象件数を更新
-            await db.prepare('UPDATE sync_runs SET total_count = ? WHERE id = ?')
-                .bind(ingestedCount, runId).run();
+            await this.repos.syncRuns.updateTotalCount(runId, ingestedCount);
 
             // Step 2: 取り込んだ未処理メールを解析する
             const { successCount, errorCount } = await this.processPending(runId);
@@ -83,17 +75,13 @@ export class SyncOrchestrator {
 
         } catch (err: unknown) {
             console.error('Fatal error in sync orchestrator:', err);
-            await db.prepare("UPDATE sync_runs SET status = ? WHERE id = ?")
-                .bind(SYNC_RUN_STATUS.FAILURE, runId).run();
+            await this.repos.syncRuns.finalize(runId, SYNC_RUN_STATUS.FAILURE, 0, 0);
             return { runId, success: false };
         }
     }
 
     private async initSyncRun(runId: string) {
-        await this.env.gym_booking_db.prepare(`
-            INSERT INTO sync_runs (id, status, total_count, success_count, error_count)
-            VALUES (?, ?, 0, 0, 0)
-        `).bind(runId, SYNC_RUN_STATUS.RUNNING).run();
+        await this.repos.syncRuns.create(runId);
     }
 
     private async finalizeSyncRun(runId: string, successCount: number, errorCount: number) {
@@ -101,11 +89,7 @@ export class SyncOrchestrator {
             ? SYNC_RUN_STATUS.SUCCESS
             : (successCount > 0 ? SYNC_RUN_STATUS.PARTIAL_SUCCESS : SYNC_RUN_STATUS.FAILURE);
 
-        await this.env.gym_booking_db.prepare(`
-            UPDATE sync_runs 
-            SET status = ?, success_count = ?, error_count = ?, executed_at = unixepoch()
-            WHERE id = ?
-        `).bind(finalStatus, successCount, errorCount, runId).run();
+        await this.repos.syncRuns.finalize(runId, finalStatus, successCount, errorCount);
     }
 
     /**
@@ -115,7 +99,6 @@ export class SyncOrchestrator {
      */
     async ingest(maxLimit: number = 2000): Promise<{ count: number }> {
         const gmail = new GmailService(this.env);
-        const db = this.env.gym_booking_db;
         const query = 'subject:"札幌市公共施設予約情報システム"';
 
         console.log(`[Ingest] Starting sync with query: ${query}`);
@@ -141,7 +124,7 @@ export class SyncOrchestrator {
 
                 // バッチ内のメッセージがDBに存在するか一括チェック
                 const checkResults = await Promise.all(batch.map(async (msg) => {
-                    const existing = await db.prepare('SELECT id FROM raw_emails WHERE id = ?').bind(msg.id).first();
+                    const existing = await this.repos.rawEmails.findById(msg.id);
                     return { msg, existing: !!existing };
                 }));
 
@@ -158,17 +141,14 @@ export class SyncOrchestrator {
                     await Promise.all(toFetch.map(async ({ msg }) => {
                         try {
                             const detail = await gmail.getMessage(msg.id);
-                            await db.prepare(`
-                                INSERT INTO raw_emails (id, thread_id, subject, snippet, body, fetched_at, parse_status)
-                                VALUES (?, ?, ?, ?, ?, unixepoch(), ?)
-                            `).bind(
-                                detail.id,
-                                detail.threadId,
-                                detail.subject,
-                                detail.snippet,
-                                detail.body || null,
-                                PARSE_STATUS.PENDING
-                            ).run();
+                            await this.repos.rawEmails.create({
+                                id: detail.id,
+                                thread_id: detail.threadId,
+                                subject: detail.subject,
+                                snippet: detail.snippet,
+                                body: detail.body || null,
+                                parse_status: PARSE_STATUS.PENDING
+                            });
                             ingested++;
                         } catch (err) {
                             console.error(`[Ingest] Failed for message ${msg.id}:`, err);
@@ -198,10 +178,7 @@ export class SyncOrchestrator {
      * raw_emails テーブルの未処理データを解析し、bookings テーブルに反映する。
      */
     async processPending(runId: string): Promise<{ successCount: number; errorCount: number }> {
-        const db = this.env.gym_booking_db;
-        const { results } = await db.prepare("SELECT * FROM raw_emails WHERE parse_status IN (?, ?) ORDER BY fetched_at ASC")
-            .bind(PARSE_STATUS.PENDING, PARSE_STATUS.FAIL)
-            .all<RawEmailRow>();
+        const results = await this.repos.rawEmails.findPending();
 
         console.log(`[Process] Found ${results.length} emails to process (Chronological order).`);
 
@@ -220,7 +197,6 @@ export class SyncOrchestrator {
      * 1行の生データを解析・保存し、ステータスを更新する
      */
     private async parseAndSaveRow(runId: string, row: RawEmailRow): Promise<boolean> {
-        const db = this.env.gym_booking_db;
         const content = row.body || row.snippet;
 
         try {
@@ -228,21 +204,18 @@ export class SyncOrchestrator {
 
             // 解析結果が null の場合は「対象外メール」としてマーク
             if (!parsed) {
-                await db.prepare("UPDATE raw_emails SET parse_status = ? WHERE id = ?")
-                    .bind(PARSE_STATUS.SKIPPED, row.id).run();
+                await this.repos.rawEmails.updateParseStatus(row.id, PARSE_STATUS.SKIPPED);
                 return true;
             }
 
             await this.saveBooking(parsed, row.id);
-            await db.prepare("UPDATE raw_emails SET parse_status = ? WHERE id = ?")
-                .bind(PARSE_STATUS.SUCCESS, row.id).run();
+            await this.repos.rawEmails.updateParseStatus(row.id, PARSE_STATUS.SUCCESS);
             await this.logEmailResult(runId, row.id, PARSE_STATUS.SUCCESS, `Status: ${parsed.status}`);
             return true;
 
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : String(err);
-            await db.prepare("UPDATE raw_emails SET parse_status = ? WHERE id = ?")
-                .bind(PARSE_STATUS.FAIL, row.id).run();
+            await this.repos.rawEmails.updateParseStatus(row.id, PARSE_STATUS.FAIL);
             await this.logEmailResult(runId, row.id, 'error', `FAIL: ${msg}`);
             return false;
         }
@@ -252,51 +225,30 @@ export class SyncOrchestrator {
      * 予約情報を bookings テーブルに保存する
      */
     private async saveBooking(booking: ParsedBooking, rawMailId: string) {
-        const db = this.env.gym_booking_db;
         const id = booking.registration_number || crypto.randomUUID();
 
-        // status の上書きガード: won または confirmed の場合は applied で上書きしない
-        // 定数もパラメータとして渡すことで SQL 側をクリーンに保つ
-        await db.prepare(`
-      INSERT INTO bookings (
-        id, facility_name, event_date, event_end_date, 
-        registration_number, purpose, status, raw_mail_id, updated_at
-      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, unixepoch())
-      ON CONFLICT(raw_mail_id) DO UPDATE SET
-        status = CASE 
-          WHEN excluded.status = ?9 AND status IN (?10, ?11) THEN status
-          ELSE excluded.status
-        END,
-        updated_at = unixepoch()
-      ON CONFLICT(id) DO UPDATE SET
-        status = CASE 
-          WHEN excluded.status = ?9 AND status IN (?10, ?11) THEN status
-          ELSE excluded.status
-        END,
-        updated_at = unixepoch()
-    `).bind(
-            id,                     // ?1
-            booking.facility_name,  // ?2
-            booking.event_date,      // ?3
-            booking.event_end_date || null, // ?4
-            booking.registration_number || null, // ?5
-            booking.purpose || null, // ?6
-            booking.status,         // ?7
-            rawMailId,              // ?8
-            BOOKING_STATUS.APPLIED, // ?9
-            BOOKING_STATUS.WON,     // ?10
-            BOOKING_STATUS.CONFIRMED // ?11
-        ).run();
+        await this.repos.bookings.upsert({
+            id,
+            facility_name: booking.facility_name,
+            event_date: booking.event_date,
+            event_end_date: booking.event_end_date || null,
+            registration_number: booking.registration_number || null,
+            purpose: booking.purpose || null,
+            status: booking.status,
+            raw_mail_id: rawMailId,
+        });
     }
 
     /**
      * 各メールの処理結果を個別ログ (sync_logs) に記録する
      */
     private async logEmailResult(runId: string, mailId: string, status: string, errorDetail?: string) {
-        const db = this.env.gym_booking_db;
-        await db.prepare(`
-      INSERT INTO sync_logs (id, sync_run_id, raw_mail_id, status, error_detail)
-      VALUES (?, ?, ?, ?, ?)
-    `).bind(crypto.randomUUID(), runId, mailId, status, errorDetail || null).run();
+        await this.repos.syncLogs.create({
+            id: crypto.randomUUID(),
+            sync_run_id: runId,
+            raw_mail_id: mailId,
+            status,
+            error_detail: errorDetail || null
+        });
     }
 }
