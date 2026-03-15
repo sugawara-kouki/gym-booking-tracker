@@ -1,4 +1,5 @@
-import { Hono } from 'hono'
+import { OpenAPIHono } from '@hono/zod-openapi'
+import { swaggerUI } from '@hono/swagger-ui'
 import { cors } from 'hono/cors'
 import { SyncOrchestrator } from './services/sync-orchestrator'
 import { poc } from './routes/poc'
@@ -10,11 +11,11 @@ export type Bindings = {
   gym_booking_db: D1Database
 }
 
-const app = new Hono<{ Bindings: Bindings }>()
+const app = new OpenAPIHono<{ Bindings: Bindings }>()
 
-// Swagger UI (localhost:8080) からのリクエストを許可するためのCORS設定
+// 必要に応じてフロントエンド用のCORSを設定
 app.use('*', cors({
-  origin: 'http://localhost:8080',
+  origin: '*', // Swagger UIは同一オリジンになるため、外部からのアクセス用に緩和まはた削除可能ですが、一旦'*'にしておきます
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 }))
 
@@ -23,6 +24,16 @@ app.get('/', (c) => {
 })
 
 app.route('/poc', poc)
+
+app.doc('/doc', {
+  openapi: '3.0.0',
+  info: {
+    version: '1.0.0',
+    title: 'Gym Booking Tracker API',
+  },
+})
+
+app.get('/swagger', swaggerUI({ url: '/doc' }))
 
 export default {
   fetch: app.fetch,
