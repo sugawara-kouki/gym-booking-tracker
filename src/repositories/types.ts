@@ -26,6 +26,15 @@ export interface SyncRunRow {
     executed_at: number | null;
 }
 
+export interface UserRow {
+    id: string;
+    email: string;
+    name: string;
+    refresh_token_encrypted: string | null;
+    created_at: number;
+    updated_at: number;
+}
+
 export interface BookingRow {
     id: string;
     facility_name: string;
@@ -44,6 +53,14 @@ export interface SyncLogRow {
     raw_mail_id: string;
     status: string;
     error_detail: string | null;
+}
+
+/**
+ * users テーブルの操作インターフェース
+ */
+export interface UserRepository {
+    findById(id: string): Promise<UserRow | null>;
+    upsert(user: Omit<UserRow, 'created_at' | 'updated_at'>): Promise<void>;
 }
 
 /**

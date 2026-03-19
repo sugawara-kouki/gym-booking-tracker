@@ -3,11 +3,15 @@ import { swaggerUI } from '@hono/swagger-ui'
 import { cors } from 'hono/cors'
 import { SyncOrchestrator } from './services/sync-orchestrator'
 import { poc } from './routes/poc'
+import { auth } from './routes/auth'
+import { jwt } from 'hono/jwt'
 
 export type Bindings = {
   GOOGLE_CLIENT_ID: string
   GOOGLE_CLIENT_SECRET: string
   GOOGLE_REFRESH_TOKEN: string
+  ENCRYPTION_KEY: string
+  JWT_SECRET: string
   gym_booking_db: D1Database
 }
 
@@ -23,8 +27,20 @@ app.get('/', (c) => {
   return c.text('Gym Booking Tracker API')
 })
 
-app.route('/poc', poc)
+// PoCの全ルートにJWT保護を適用するミドルウェア
+app.use('/poc/*', async (c, next) => {
+  const jwtMiddleware = jwt({
+    secret: c.env.JWT_SECRET,
+    cookie: 'auth_token',
+    alg: 'HS256'
+  })
+  return jwtMiddleware(c, next)
+})
 
+app.route('/poc', poc)
+app.route('/auth', auth)
+
+// /docを開くとswagger uiが表示される
 app.doc('/doc', {
   openapi: '3.0.0',
   info: {
