@@ -1,11 +1,11 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
 import { getCookie, setCookie } from 'hono/cookie'
 import { sign } from 'hono/jwt'
-import type { Bindings } from '../index'
 import { createRepositories } from '../repositories'
 import { encryptToken } from '../utils/crypto'
+import type { Bindings, Variables } from '../types'
 
-export const auth = new OpenAPIHono<{ Bindings: Bindings }>()
+export const auth = new OpenAPIHono<{ Bindings: Bindings, Variables: Variables }>()
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'

@@ -1,10 +1,25 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
+import { jwt } from 'hono/jwt'
 import { GmailService } from '../services/gmail'
 import { SyncOrchestrator, SYNC_RUN_STATUS } from '../services/sync-orchestrator'
 import { createRepositories } from '../repositories'
-import type { Bindings } from '../index'
+import { injectUser } from '../middleware/auth'
+import { injectGmail } from '../middleware/gmail'
+import type { Bindings, Variables } from '../types'
 
-export const poc = new OpenAPIHono<{ Bindings: Bindings }>()
+export const poc = new OpenAPIHono<{ Bindings: Bindings, Variables: Variables }>()
+
+// POCルート全体に適用するミドルウェア
+poc.use('*', async (c, next) => {
+  const jwtMiddleware = jwt({
+    secret: c.env.JWT_SECRET,
+    cookie: 'auth_token',
+    alg: 'HS256'
+  })
+  return jwtMiddleware(c, next)
+})
+poc.use('*', injectUser)
+poc.use('*', injectGmail)
 
 // --- Schemas ---
 const ErrorSchema = z.object({
@@ -31,11 +46,16 @@ const emailsRoute = createRoute({
       content: { 'application/json': { schema: SuccessResponseSchema(z.any()) } },
       description: 'List of emails'
     },
+    401: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Unauthorized'
+    },
     500: {
       content: { 'application/json': { schema: ErrorSchema } },
       description: 'Server error'
     }
-  }
+  },
+  security: [{ cookieAuth: [] }]
 })
 
 const dbClearRoute = createRoute({
@@ -127,7 +147,7 @@ const syncRoute = createRoute({
 
 poc.openapi(emailsRoute, async (c) => {
   try {
-    const gmail = new GmailService(c.env)
+    const gmail = c.get('gmail')
     const messages = await gmail.listMessages(5)
 
     return c.json({
