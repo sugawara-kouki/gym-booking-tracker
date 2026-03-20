@@ -4,7 +4,9 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy --minify",
-    "cf-typegen": "wrangler types --env-interface CloudflareBindings"
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@hono/swagger-ui": "^0.6.1",
@@ -14,6 +16,8 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260307.1",
+    "@vitest/coverage-v8": "^4.1.0",
+    "vitest": "^4.1.0",
     "wrangler": "^4.4.0"
   }
 }
