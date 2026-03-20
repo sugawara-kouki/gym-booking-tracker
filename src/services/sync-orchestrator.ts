@@ -1,6 +1,6 @@
 import { GmailService } from './gmail';
 import { BOOKING_STATUS, EmailParser, ParsedBooking } from './parser';
-import { Bindings } from '../index';
+import { Bindings } from '../types';
 import { createRepositories, Repositories } from '../repositories';
 import { RawEmailRow } from '../repositories/types';
 
@@ -99,9 +99,7 @@ export class SyncOrchestrator {
      */
     async ingest(maxLimit: number = 2000): Promise<{ count: number }> {
         const gmail = new GmailService(this.env);
-        const query = 'subject:"札幌市公共施設予約情報システム"';
-
-        console.log(`[Ingest] Starting sync with query: ${query}`);
+        console.log(`[Ingest] Starting sync with query: ${this.GMAIL_QUERY}`);
         let ingested = 0;
         let pageToken: string | undefined = undefined;
         let totalScanned = 0;
@@ -109,21 +107,20 @@ export class SyncOrchestrator {
 
         do {
             // ページごとにメッセージ一覧を取得
-            const result = await gmail.listMessages(50, query, pageToken);
+            const result = await gmail.listMessages(50, this.GMAIL_QUERY, pageToken);
             const messages = result.messages;
             pageToken = result.nextPageToken;
 
             if (messages.length === 0) break;
 
             // バッチ処理（5件ずつ並列に詳細を取得）
-            const batchSize = 5;
-            for (let i = 0; i < messages.length; i += batchSize) {
+            for (let i = 0; i < messages.length; i += this.DB_BATCH_SIZE) {
                 if (stopSync) break;
 
-                const batch = messages.slice(i, i + batchSize);
+                const batch = messages.slice(i, i + this.DB_BATCH_SIZE);
 
                 // バッチ内のメッセージがDBに存在するか一括チェック
-                const checkResults = await Promise.all(batch.map(async (msg) => {
+                const checkResults = await Promise.all(batch.map(async (msg: { id: string }) => {
                     const existing = await this.repos.rawEmails.findById(msg.id);
                     return { msg, existing: !!existing };
                 }));
