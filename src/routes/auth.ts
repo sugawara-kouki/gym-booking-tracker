@@ -1,8 +1,9 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { getCookie, setCookie } from 'hono/cookie'
-import { sign } from 'hono/jwt'
+import { sign, jwt } from 'hono/jwt'
 import { createRepositories } from '../repositories'
 import { encryptToken } from '../utils/crypto'
+import { injectUser } from '../middleware/auth'
 import type { Bindings, Variables } from '../types'
 
 export const auth = new OpenAPIHono<{ Bindings: Bindings, Variables: Variables }>()
@@ -10,6 +11,17 @@ export const auth = new OpenAPIHono<{ Bindings: Bindings, Variables: Variables }
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v2/userinfo'
+
+// 成功ページにはJWT認証とユーザー情報注入を適用
+auth.use('/success', async (c, next) => {
+  const jwtMiddleware = jwt({
+    secret: c.env.JWT_SECRET,
+    cookie: 'auth_token',
+    alg: 'HS256'
+  })
+  return jwtMiddleware(c, next)
+})
+auth.use('/success', injectUser)
 
 // --- Schemas for Google API Responses ---
 const GoogleTokenResponseSchema = z.object({
@@ -63,9 +75,8 @@ const googleCallbackRoute = createRoute({
   summary: 'Google OAuth Callback',
   description: 'Googleからの認可コードを受け取り、トークン交換とログイン処理を完了させます',
   responses: {
-    200: {
-      description: 'Authentication successful HTML',
-      content: { 'text/html': { schema: z.string() } }
+    302: {
+      description: 'Redirect to success page'
     },
     400: {
       description: 'Invalid request (state mismatch or missing code)',
@@ -73,6 +84,19 @@ const googleCallbackRoute = createRoute({
     },
     500: {
       description: 'Authentication failed',
+      content: { 'text/html': { schema: z.string() } }
+    }
+  }
+})
+
+const successRoute = createRoute({
+  method: 'get',
+  path: '/success',
+  summary: 'Authentication Success Page',
+  description: '認証成功後のクリーンなURLの画面を表示します',
+  responses: {
+    200: {
+      description: 'Success page HTML',
       content: { 'text/html': { schema: z.string() } }
     }
   }
@@ -218,33 +242,8 @@ auth.openapi(googleCallbackRoute, async (c) => {
       maxAge: 60 * 60 * 24 * 7
     })
     
-    // 認証完了
-    return c.html(`
-      <!DOCTYPE html>
-      <html lang="ja">
-      <head>
-        <meta charset="UTF-8">
-        <title>認証成功 - Gym Booking Tracker</title>
-        <style>
-          body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f0f2f5;}
-          .card { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; }
-          .btn { display: inline-block; background: #4285F4; color: white; text-decoration: none; padding: 10px 20px; border-radius: 4px; font-weight: bold; margin-top: 10px;}
-          .btn.secondary { background: #6c757d; }
-        </style>
-      </head>
-      <body>
-        <div class="card">
-          <h2>認証成功！</h2>
-          <p>${userInfo.name}さん、ようこそ。</p>
-          <p>APIの準備が整いました。このままPoCのエンドポイントなどを利用可能です。</p>
-          <div style="margin-top: 20px;">
-            <a href="/swagger" class="btn">Swagger UIを確認する</a><br>
-            <a href="/auth/logout" class="btn secondary" style="margin-top: 10px;">ログアウト</a>
-          </div>
-        </div>
-      </body>
-      </html>
-    `, 200)
+    // 認証完了後のパスへリダイレクト（URLパラメータを消すため）
+    return c.redirect('/auth/success')
   } catch (e: unknown) {
     console.error('Auth callback error:', e)
     const message = e instanceof Error ? e.message : String(e)
@@ -268,4 +267,35 @@ auth.openapi(logoutRoute, (c) => {
     expires: new Date(0)
   })
   return c.redirect('/auth/login')
+})
+
+// 認証成功画面（クリーンURL）
+auth.openapi(successRoute, (c) => {
+  const user = c.get('user')
+  return c.html(`
+    <!DOCTYPE html>
+    <html lang="ja">
+    <head>
+      <meta charset="UTF-8">
+      <title>認証成功 - Gym Booking Tracker</title>
+      <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f0f2f5;}
+        .card { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; }
+        .btn { display: inline-block; background: #4285F4; color: white; text-decoration: none; padding: 10px 20px; border-radius: 4px; font-weight: bold; margin-top: 10px;}
+        .btn.secondary { background: #6c757d; }
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <h2>認証成功！</h2>
+        <p>${user.name}さん、ようこそ。</p>
+        <p>APIの準備が整いました。このままPoCのエンドポイントなどを利用可能です。</p>
+        <div style="margin-top: 20px;">
+          <a href="/swagger" class="btn">Swagger UIを確認する</a><br>
+          <a href="/auth/logout" class="btn secondary" style="margin-top: 10px;">ログアウト</a>
+        </div>
+      </div>
+    </body>
+    </html>
+  `)
 })
