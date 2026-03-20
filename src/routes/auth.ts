@@ -1,4 +1,4 @@
-import { OpenAPIHono } from '@hono/zod-openapi'
+import { OpenAPIHono, z } from '@hono/zod-openapi'
 import { getCookie, setCookie } from 'hono/cookie'
 import { sign } from 'hono/jwt'
 import { createRepositories } from '../repositories'
@@ -10,6 +10,27 @@ export const auth = new OpenAPIHono<{ Bindings: Bindings, Variables: Variables }
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v2/userinfo'
+
+// --- Schemas for Google API Responses ---
+const GoogleTokenResponseSchema = z.object({
+  access_token: z.string(),
+  expires_in: z.number(),
+  refresh_token: z.string().optional(),
+  scope: z.string(),
+  token_type: z.string(),
+  id_token: z.string().optional(),
+})
+
+const GoogleUserInfoSchema = z.object({
+  id: z.string(),
+  email: z.string().email(),
+  verified_email: z.boolean(),
+  name: z.string().optional(),
+  given_name: z.string().optional(),
+  family_name: z.string().optional(),
+  picture: z.string().url().optional(),
+  locale: z.string().optional(),
+})
 
 // PoC用のログイン画面
 auth.get('/login', (c) => {
@@ -96,23 +117,23 @@ auth.get('/google/callback', async (c) => {
         throw new Error(`Failed to exchange token: ${err}`)
     }
 
-    const tokens = await tokenResponse.json() as any
-    const accessToken = tokens.access_token
-    const refreshToken = tokens.refresh_token // prompt=consent なので基本的についてくるはず
+    const tokenData = await tokenResponse.json()
+    const tokens = GoogleTokenResponseSchema.parse(tokenData)
 
     // 2. ユーザー情報を取得
     const userInfoResponse = await fetch(GOOGLE_USERINFO_URL, {
-      headers: { Authorization: `Bearer ${accessToken}` }
+      headers: { Authorization: `Bearer ${tokens.access_token}` }
     })
-    const userInfo = await userInfoResponse.json() as any
+    const userInfoData = await userInfoResponse.json()
+    const userInfo = GoogleUserInfoSchema.parse(userInfoData)
     
     // 3. データベースへ保存 (リフレッシュトークン含め)
     const repos = createRepositories(c.env.gym_booking_db)
     
     // refresh_token が送られてこない場合もあるため（過去に同意済みの場合など）、存在する場合のみ暗号化
     let encryptedRefreshToken = null;
-    if (refreshToken) {
-        encryptedRefreshToken = await encryptToken(refreshToken, c.env.ENCRYPTION_KEY)
+    if (tokens.refresh_token) {
+        encryptedRefreshToken = await encryptToken(tokens.refresh_token, c.env.ENCRYPTION_KEY)
     }
 
     // ユーザー情報のUpsert（既存ユーザーの場合はリフレッシュトークンが新たに取れたら更新）
@@ -152,10 +173,10 @@ auth.get('/google/callback', async (c) => {
         </div>
       </body>
       </html>
-    `)
-    
-  } catch (e: any) {
-    console.error('Google Auth Error:', e)
-    return c.text(`認証処理中にエラーが発生しました: ${e.message}`, 500)
+    `, 200)
+  } catch (e: unknown) {
+    console.error('Auth callback error:', e)
+    const message = e instanceof Error ? e.message : String(e)
+    return c.html(`<h1>Authentication Failed</h1><p>${message}</p><a href="/auth/login">Retry</a>`, 500)
   }
 })

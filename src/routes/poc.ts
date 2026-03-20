@@ -34,6 +34,44 @@ const SuccessResponseSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>
     data: dataSchema.optional()
   })
 
+const GmailMessageSchema = z.object({
+  id: z.string(),
+  threadId: z.string(),
+})
+
+const EmailListResponseSchema = z.object({
+  messages: z.array(GmailMessageSchema),
+  nextPageToken: z.string().optional()
+})
+
+const BookingSchema = z.object({
+  id: z.string(),
+  facility_name: z.string(),
+  event_date: z.string(),
+  event_end_date: z.string().nullable(),
+  registration_number: z.string().nullable(),
+  purpose: z.string().nullable(),
+  status: z.string(),
+  raw_mail_id: z.string(),
+  created_at: z.string().optional(),
+})
+
+const IngestResultSchema = z.object({
+  count: z.number()
+})
+
+const ProcessPendingResultSchema = z.object({
+  successCount: z.number(),
+  errorCount: z.number(),
+  runId: z.string()
+})
+
+const FullSyncResultSchema = z.object({
+  runId: z.string(),
+  success: z.boolean()
+})
+
+
 // --- Routes configuration ---
 
 const emailsRoute = createRoute({
@@ -43,7 +81,7 @@ const emailsRoute = createRoute({
   description: 'PoC: Gmailからメール一覧を取得して返すテストエンドポイント',
   responses: {
     200: {
-      content: { 'application/json': { schema: SuccessResponseSchema(z.any()) } },
+      content: { 'application/json': { schema: SuccessResponseSchema(EmailListResponseSchema) } },
       description: 'List of emails'
     },
     401: {
@@ -65,7 +103,7 @@ const dbClearRoute = createRoute({
   description: 'PoC: データベースの全データをクリア',
   responses: {
     200: {
-      content: { 'application/json': { schema: SuccessResponseSchema(z.any()) } },
+      content: { 'application/json': { schema: SuccessResponseSchema(z.object({})) } },
       description: 'Data cleared successfully'
     },
     500: {
@@ -82,7 +120,7 @@ const dbTestRoute = createRoute({
   description: 'PoC: D1 データベースへの接続テスト',
   responses: {
     200: {
-      content: { 'application/json': { schema: SuccessResponseSchema(z.any()) } },
+      content: { 'application/json': { schema: SuccessResponseSchema(z.array(BookingSchema)) } },
       description: 'Connection successful'
     },
     500: {
@@ -99,7 +137,7 @@ const ingestRoute = createRoute({
   description: 'PoC: Gmailからの取り込み（Ingest）のみを実行',
   responses: {
     200: {
-      content: { 'application/json': { schema: SuccessResponseSchema(z.any()) } },
+      content: { 'application/json': { schema: SuccessResponseSchema(IngestResultSchema) } },
       description: 'Ingest completed'
     },
     500: {
@@ -116,7 +154,7 @@ const parsePendingRoute = createRoute({
   description: 'PoC: DB内の未処理メールの解析（Parse Pending）のみを実行',
   responses: {
     200: {
-      content: { 'application/json': { schema: SuccessResponseSchema(z.any()) } },
+      content: { 'application/json': { schema: SuccessResponseSchema(ProcessPendingResultSchema) } },
       description: 'Processing completed'
     },
     500: {
@@ -133,7 +171,7 @@ const syncRoute = createRoute({
   description: 'PoC: 同期処理（SyncOrchestrator）の実行テスト',
   responses: {
     200: {
-      content: { 'application/json': { schema: SuccessResponseSchema(z.any()) } },
+      content: { 'application/json': { schema: SuccessResponseSchema(FullSyncResultSchema) } },
       description: 'Sync completed'
     },
     500: {
