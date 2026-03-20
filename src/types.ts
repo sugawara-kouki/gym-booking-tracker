@@ -17,4 +17,5 @@ export type Variables = {
   }
   user: UserRow
   gmail: GmailService
+  requestId: string
 }

@@ -3,6 +3,7 @@ import { BOOKING_STATUS, EmailParser, ParsedBooking } from './parser';
 import { Bindings } from '../types';
 import { createRepositories, Repositories } from '../repositories';
 import { RawEmailRow } from '../repositories/types';
+import { Logger } from '../utils/logger';
 
 /**
  * メール解析ステータスの定数
@@ -74,7 +75,7 @@ export class SyncOrchestrator {
             return { runId, success: true };
 
         } catch (err: unknown) {
-            console.error('Fatal error in sync orchestrator:', err);
+            Logger.error(null, 'Fatal error in sync orchestrator', { runId, error: err });
             await this.repos.syncRuns.finalize(runId, SYNC_RUN_STATUS.FAILURE, 0, 0);
             return { runId, success: false };
         }
@@ -99,7 +100,7 @@ export class SyncOrchestrator {
      */
     async ingest(maxLimit: number = 2000): Promise<{ count: number }> {
         const gmail = new GmailService(this.env);
-        console.log(`[Ingest] Starting sync with query: ${this.GMAIL_QUERY}`);
+        Logger.info(null, 'Starting ingest process', { query: this.GMAIL_QUERY });
         let ingested = 0;
         let pageToken: string | undefined = undefined;
         let totalScanned = 0;
@@ -130,7 +131,7 @@ export class SyncOrchestrator {
 
                 // 既存のメッセージが見つかった場合、このバッチまたは次のバッチで同期を止める
                 if (checkResults.some(r => r.existing)) {
-                    console.log(`[Ingest] Found already ingested message. Stopping scan at this point.`);
+                    Logger.info(null, 'Found already ingested message. Stopping scan.');
                     stopSync = true;
                 }
 
@@ -148,7 +149,7 @@ export class SyncOrchestrator {
                             });
                             ingested++;
                         } catch (err) {
-                            console.error(`[Ingest] Failed for message ${msg.id}:`, err);
+                            Logger.error(null, 'Failed to fetch/save message', { messageId: msg.id, error: err });
                         }
                     }));
                 }
@@ -156,7 +157,7 @@ export class SyncOrchestrator {
                 totalScanned += batch.length;
 
                 if (totalScanned >= maxLimit) {
-                    console.log(`[Ingest] Reached maxLimit (${maxLimit}). Stopping.`);
+                    Logger.info(null, 'Reached maxLimit. Stopping.', { maxLimit });
                     stopSync = true;
                     break;
                 }
@@ -167,7 +168,7 @@ export class SyncOrchestrator {
             }
         } while (pageToken);
 
-        console.log(`[Ingest] Finished. Ingested ${ingested} new messages. Total scanned: ${totalScanned}`);
+        Logger.info(null, 'Ingest finished', { ingested, totalScanned });
         return { count: ingested };
     }
 
@@ -177,7 +178,7 @@ export class SyncOrchestrator {
     async processPending(runId: string): Promise<{ successCount: number; errorCount: number }> {
         const results = await this.repos.rawEmails.findPending();
 
-        console.log(`[Process] Found ${results.length} emails to process (Chronological order).`);
+        Logger.info(null, 'Found emails to process', { count: results.length, runId });
 
         let successCount = 0;
         let errorCount = 0;
