@@ -1,8 +1,10 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
 import { swaggerUI } from '@hono/swagger-ui'
-import { cors } from 'hono/cors'
 import { poc } from './routes/poc'
 import { auth } from './routes/auth'
+import { cors } from 'hono/cors'
+import { HTTPException } from 'hono/http-exception'
+import { ERROR_CODES, ErrorResponseSchema } from './utils/error'
 import type { Bindings, Variables } from './types'
 
 export const app = new OpenAPIHono<{ Bindings: Bindings, Variables: Variables }>()
@@ -21,6 +23,33 @@ app.get('/', (c) => {
 app.route('/poc', poc)
 app.route('/auth', auth)
 
+// グローバルエラーハンドリング
+app.onError((err, c) => {
+  console.error(`[Global Error] ${err.name}: ${err.message}`, err)
+
+  // HTTPException の場合は、設定されているレスポンスをそのまま返すか、
+  // なければステータスコードを尊重して整形して返す
+  if (err instanceof HTTPException) {
+    if (err.res) return err.res
+    return c.json({
+      success: false,
+      error: {
+        code: ERROR_CODES.INTERNAL_SERVER_ERROR, // 適切なコードを導出するのは難しいのでデフォルト
+        message: err.message
+      }
+    }, err.status)
+  }
+
+  // それ以外の予期せぬエラーは 500 固定
+  return c.json({
+    success: false,
+    error: {
+      code: ERROR_CODES.INTERNAL_SERVER_ERROR,
+      message: err instanceof Error ? err.message : 'Internal Server Error'
+    }
+  }, 500)
+})
+
 // OpenAPI / Swagger UI の設定
 app.openAPIRegistry.registerComponent('securitySchemes', 'cookieAuth', {
   type: 'apiKey',
@@ -33,6 +62,7 @@ app.doc('/doc', {
   info: {
     version: '1.0.0',
     title: 'Gym Booking Tracker API',
+    description: 'ジムの予約メールを自動解析し、Googleカレンダー等と連携するためのバックエンドAPIです。',
   },
 })
 
