@@ -31,6 +31,8 @@ export interface UserRow {
     email: string;
     name: string;
     refresh_token_encrypted: string | null;
+    access_token_encrypted: string | null;
+    access_token_expires_at: number | null;
     created_at: number;
     updated_at: number;
 }

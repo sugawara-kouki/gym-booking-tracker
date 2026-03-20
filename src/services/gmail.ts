@@ -67,17 +67,32 @@ export class GmailService {
     private readonly clientId: string;
     private readonly clientSecret: string;
     private readonly refreshToken: string;
+    private accessToken: string | null;
+    private expiresAt: number | null;
+    private onTokenRefresh?: (accessToken: string, expiresAt: number) => Promise<void>;
 
-    constructor(env: { GOOGLE_CLIENT_ID: string; GOOGLE_CLIENT_SECRET: string; GOOGLE_REFRESH_TOKEN: string }) {
+    constructor(
+        env: { GOOGLE_CLIENT_ID: string; GOOGLE_CLIENT_SECRET: string; GOOGLE_REFRESH_TOKEN: string },
+        cache?: { accessToken: string | null; expiresAt: number | null; onTokenRefresh: (accessToken: string, expiresAt: number) => Promise<void> }
+    ) {
         this.clientId = env.GOOGLE_CLIENT_ID;
         this.clientSecret = env.GOOGLE_CLIENT_SECRET;
         this.refreshToken = env.GOOGLE_REFRESH_TOKEN;
+        this.accessToken = cache?.accessToken || null;
+        this.expiresAt = cache?.expiresAt || null;
+        this.onTokenRefresh = cache?.onTokenRefresh;
     }
 
     /**
      * OAuth2 リフレッシュトークンを使用してアクセストークンを更新する
      */
     private async getAccessToken(): Promise<string> {
+        // キャッシュされたトークンがあり、まだ有効であればそれを返す (5分のバッファを持たせる)
+        const now = Math.floor(Date.now() / 1000);
+        if (this.accessToken && this.expiresAt && this.expiresAt > now + 300) {
+            return this.accessToken;
+        }
+
         const response = await fetch('https://oauth2.googleapis.com/token', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -95,7 +110,20 @@ export class GmailService {
         }
 
         const data = await response.json();
-        const { access_token } = z.object({ access_token: z.string() }).parse(data);
+        const { access_token, expires_in } = z.object({ 
+            access_token: z.string(),
+            expires_in: z.number()
+        }).parse(data);
+        
+        const newExpiresAt = Math.floor(Date.now() / 1000) + expires_in;
+        this.accessToken = access_token;
+        this.expiresAt = newExpiresAt;
+
+        // コールバックがあれば新しく取得したトークンを永続化（DB保存など）する
+        if (this.onTokenRefresh) {
+            await this.onTokenRefresh(access_token, newExpiresAt);
+        }
+
         return access_token;
     }
 

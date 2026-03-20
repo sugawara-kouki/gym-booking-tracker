@@ -216,7 +216,9 @@ auth.openapi(googleCallbackRoute, async (c) => {
       id: userInfo.id,
       email: userInfo.email,
       name: userInfo.name || 'Unknown',
-      refresh_token_encrypted: encryptedRefreshToken || (existingUser?.refresh_token_encrypted || null)
+      refresh_token_encrypted: encryptedRefreshToken || (existingUser?.refresh_token_encrypted || null),
+      access_token_encrypted: await encryptToken(tokens.access_token, c.env.ENCRYPTION_KEY),
+      access_token_expires_at: Math.floor(Date.now() / 1000) + tokens.expires_in
   })
 
   // 4. APIアクセス用のセッション(JWT)を発行し、HttpOnly Cookieにセット
