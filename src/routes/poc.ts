@@ -1,6 +1,4 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import { jwt } from 'hono/jwt'
-import { GmailService } from '../services/gmail'
 import { SyncOrchestrator, SYNC_RUN_STATUS } from '../services/sync-orchestrator'
 import { createRepositories } from '../repositories'
 import { injectUser, checkJwt } from '../middleware/auth'

@@ -1,9 +1,7 @@
 import { createMiddleware } from 'hono/factory'
 import { jwt } from 'hono/jwt'
 import { createRepositories } from '../repositories'
-import { GmailService } from '../services/gmail'
 import type { Bindings, Variables } from '../types'
-import type { UserRow } from '../repositories/types'
 
 /**
  * JWTのペイロードをもとに、DBからユーザー情報を取得して Context にセットするミドルウェア
