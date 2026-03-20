@@ -78,6 +78,16 @@ const googleCallbackRoute = createRoute({
   }
 })
 
+const logoutRoute = createRoute({
+  method: 'get',
+  path: '/logout',
+  summary: 'Logout',
+  description: '認証Cookieを削除してログアウトします',
+  responses: {
+    302: { description: 'Redirect to login page' }
+  }
+})
+
 // --- Handlers ---
 
 // PoC用のログイン画面
@@ -212,12 +222,25 @@ auth.openapi(googleCallbackRoute, async (c) => {
     return c.html(`
       <!DOCTYPE html>
       <html lang="ja">
+      <head>
+        <meta charset="UTF-8">
+        <title>認証成功 - Gym Booking Tracker</title>
+        <style>
+          body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f0f2f5;}
+          .card { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; }
+          .btn { display: inline-block; background: #4285F4; color: white; text-decoration: none; padding: 10px 20px; border-radius: 4px; font-weight: bold; margin-top: 10px;}
+          .btn.secondary { background: #6c757d; }
+        </style>
+      </head>
       <body>
-        <div style="text-align:center; margin-top: 50px; font-family: sans-serif;">
+        <div class="card">
           <h2>認証成功！</h2>
           <p>${userInfo.name}さん、ようこそ。</p>
           <p>APIの準備が整いました。このままPoCのエンドポイントなどを利用可能です。</p>
-          <a href="/doc">Swagger UIを確認する</a>
+          <div style="margin-top: 20px;">
+            <a href="/swagger" class="btn">Swagger UIを確認する</a><br>
+            <a href="/auth/logout" class="btn secondary" style="margin-top: 10px;">ログアウト</a>
+          </div>
         </div>
       </body>
       </html>
@@ -227,4 +250,22 @@ auth.openapi(googleCallbackRoute, async (c) => {
     const message = e instanceof Error ? e.message : String(e)
     return c.html(`<h1>Authentication Failed</h1><p>${message}</p><a href="/auth/login">Retry</a>`, 500)
   }
+})
+
+// ログアウト処理
+auth.openapi(logoutRoute, (c) => {
+  setCookie(c, 'auth_token', '', {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'Lax',
+    maxAge: 0,
+    expires: new Date(0)
+  })
+  setCookie(c, 'oauth_state', '', {
+    httpOnly: true,
+    secure: true,
+    maxAge: 0,
+    expires: new Date(0)
+  })
+  return c.redirect('/auth/login')
 })
