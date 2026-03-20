@@ -1,4 +1,4 @@
-import { OpenAPIHono, z } from '@hono/zod-openapi'
+import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { getCookie, setCookie } from 'hono/cookie'
 import { sign } from 'hono/jwt'
 import { createRepositories } from '../repositories'
@@ -32,8 +32,56 @@ const GoogleUserInfoSchema = z.object({
   locale: z.string().optional(),
 })
 
+// --- Routes configuration ---
+
+const loginRoute = createRoute({
+  method: 'get',
+  path: '/login',
+  summary: 'Login page UI',
+  description: 'ユーザーログイン用のHTML画面を表示します',
+  responses: {
+    200: {
+      description: 'Login page HTML',
+      content: { 'text/html': { schema: z.string() } }
+    }
+  }
+})
+
+const googleAuthRoute = createRoute({
+  method: 'get',
+  path: '/google',
+  summary: 'Redirect to Google OAuth',
+  description: 'Googleの認可画面（OAuth同意画面）へリダイレクトします',
+  responses: {
+    302: { description: 'Redirect to Google' }
+  }
+})
+
+const googleCallbackRoute = createRoute({
+  method: 'get',
+  path: '/google/callback',
+  summary: 'Google OAuth Callback',
+  description: 'Googleからの認可コードを受け取り、トークン交換とログイン処理を完了させます',
+  responses: {
+    200: {
+      description: 'Authentication successful HTML',
+      content: { 'text/html': { schema: z.string() } }
+    },
+    400: {
+      description: 'Invalid request (state mismatch or missing code)',
+      content: { 'text/plain': { schema: z.string() } }
+    },
+    500: {
+      description: 'Authentication failed',
+      content: { 'text/html': { schema: z.string() } }
+    }
+  }
+})
+
+// --- Handlers ---
+
 // PoC用のログイン画面
-auth.get('/login', (c) => {
+auth.openapi(loginRoute, (c) => {
   return c.html(`
     <!DOCTYPE html>
     <html lang="ja">
@@ -59,7 +107,7 @@ auth.get('/login', (c) => {
 })
 
 // Google 認可画面へのリダイレクト
-auth.get('/google', (c) => {
+auth.openapi(googleAuthRoute, (c) => {
   const url = new URL(c.req.url)
   const redirectUri = `${url.protocol}//${url.host}/auth/google/callback`
   
@@ -81,7 +129,7 @@ auth.get('/google', (c) => {
 })
 
 // Googleからのコールバック
-auth.get('/google/callback', async (c) => {
+auth.openapi(googleCallbackRoute, async (c) => {
   const url = new URL(c.req.url)
   const code = url.searchParams.get('code')
   const state = url.searchParams.get('state')
