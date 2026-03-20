@@ -15,19 +15,14 @@ export const injectGmail = createMiddleware<{ Bindings: Bindings, Variables: Var
     return c.json({ success: false, error: 'Google account not connected' }, 401)
   }
 
-  try {
-    const refreshToken = await decryptToken(user.refresh_token_encrypted, c.env.ENCRYPTION_KEY)
-    
-    const gmail = new GmailService({
-      GOOGLE_CLIENT_ID: c.env.GOOGLE_CLIENT_ID,
-      GOOGLE_CLIENT_SECRET: c.env.GOOGLE_CLIENT_SECRET,
-      GOOGLE_REFRESH_TOKEN: refreshToken
-    })
+  const refreshToken = await decryptToken(user.refresh_token_encrypted, c.env.ENCRYPTION_KEY)
+  
+  const gmail = new GmailService({
+    GOOGLE_CLIENT_ID: c.env.GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: c.env.GOOGLE_CLIENT_SECRET,
+    GOOGLE_REFRESH_TOKEN: refreshToken
+  })
 
-    c.set('gmail', gmail)
-    await next()
-  } catch (e) {
-    console.error('Failed to inject GmailService:', e)
-    return c.json({ success: false, error: 'Failed to initialize Gmail service' }, 500)
-  }
+  c.set('gmail', gmail)
+  await next()
 })

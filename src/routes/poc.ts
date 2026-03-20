@@ -3,7 +3,7 @@ import { jwt } from 'hono/jwt'
 import { GmailService } from '../services/gmail'
 import { SyncOrchestrator, SYNC_RUN_STATUS } from '../services/sync-orchestrator'
 import { createRepositories } from '../repositories'
-import { injectUser } from '../middleware/auth'
+import { injectUser, checkJwt } from '../middleware/auth'
 import { injectGmail } from '../middleware/gmail'
 import { ErrorResponseSchema } from '../utils/error'
 import type { Bindings, Variables } from '../types'
@@ -11,14 +11,7 @@ import type { Bindings, Variables } from '../types'
 export const poc = new OpenAPIHono<{ Bindings: Bindings, Variables: Variables }>()
 
 // POCルート全体に適用するミドルウェア
-poc.use('*', async (c, next) => {
-  const jwtMiddleware = jwt({
-    secret: c.env.JWT_SECRET,
-    cookie: 'auth_token',
-    alg: 'HS256'
-  })
-  return jwtMiddleware(c, next)
-})
+poc.use('*', checkJwt)
 poc.use('*', injectUser)
 poc.use('*', injectGmail)
 

@@ -1,4 +1,5 @@
 import { createMiddleware } from 'hono/factory'
+import { jwt } from 'hono/jwt'
 import { createRepositories } from '../repositories'
 import { GmailService } from '../services/gmail'
 import type { Bindings, Variables } from '../types'
@@ -23,4 +24,16 @@ export const injectUser = createMiddleware<{ Bindings: Bindings, Variables: Vari
 
   c.set('user', user)
   await next()
+})
+
+/**
+ * JWTの検証を行い、ペイロードを Context にセットするミドルウェア
+ */
+export const checkJwt = createMiddleware<{ Bindings: Bindings, Variables: Variables }>(async (c, next) => {
+  const jwtMiddleware = jwt({
+    secret: c.env.JWT_SECRET,
+    cookie: 'auth_token',
+    alg: 'HS256'
+  })
+  return jwtMiddleware(c, next)
 })

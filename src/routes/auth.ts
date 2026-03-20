@@ -1,9 +1,9 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { getCookie, setCookie } from 'hono/cookie'
-import { sign, jwt } from 'hono/jwt'
+import { sign } from 'hono/jwt'
 import { createRepositories } from '../repositories'
 import { encryptToken } from '../utils/crypto'
-import { injectUser } from '../middleware/auth'
+import { injectUser, checkJwt } from '../middleware/auth'
 import type { Bindings, Variables } from '../types'
 
 export const auth = new OpenAPIHono<{ Bindings: Bindings, Variables: Variables }>()
@@ -13,14 +13,7 @@ const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v2/userinfo'
 
 // 成功ページにはJWT認証とユーザー情報注入を適用
-auth.use('/success', async (c, next) => {
-  const jwtMiddleware = jwt({
-    secret: c.env.JWT_SECRET,
-    cookie: 'auth_token',
-    alg: 'HS256'
-  })
-  return jwtMiddleware(c, next)
-})
+auth.use('/success', checkJwt)
 auth.use('/success', injectUser)
 
 // --- Schemas for Google API Responses ---
@@ -180,75 +173,69 @@ auth.openapi(googleCallbackRoute, async (c) => {
   
   const redirectUri = `${url.protocol}//${url.host}/auth/google/callback`
 
-  try {
-    // 1. 認可コードをトークンと交換
-    const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: c.env.GOOGLE_CLIENT_ID,
-        client_secret: c.env.GOOGLE_CLIENT_SECRET,
-        code,
-        redirect_uri: redirectUri,
-        grant_type: 'authorization_code'
-      })
+  // 1. 認可コードをトークンと交換
+  const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: c.env.GOOGLE_CLIENT_ID,
+      client_secret: c.env.GOOGLE_CLIENT_SECRET,
+      code,
+      redirect_uri: redirectUri,
+      grant_type: 'authorization_code'
     })
-    
-    if (!tokenResponse.ok) {
-        const err = await tokenResponse.text();
-        throw new Error(`Failed to exchange token: ${err}`)
-    }
-
-    const tokenData = await tokenResponse.json()
-    const tokens = GoogleTokenResponseSchema.parse(tokenData)
-
-    // 2. ユーザー情報を取得
-    const userInfoResponse = await fetch(GOOGLE_USERINFO_URL, {
-      headers: { Authorization: `Bearer ${tokens.access_token}` }
-    })
-    const userInfoData = await userInfoResponse.json()
-    const userInfo = GoogleUserInfoSchema.parse(userInfoData)
-    
-    // 3. データベースへ保存 (リフレッシュトークン含め)
-    const repos = createRepositories(c.env.gym_booking_db)
-    
-    // refresh_token が送られてこない場合もあるため（過去に同意済みの場合など）、存在する場合のみ暗号化
-    let encryptedRefreshToken = null;
-    if (tokens.refresh_token) {
-        encryptedRefreshToken = await encryptToken(tokens.refresh_token, c.env.ENCRYPTION_KEY)
-    }
-
-    // ユーザー情報のUpsert（既存ユーザーの場合はリフレッシュトークンが新たに取れたら更新）
-    const existingUser = await repos.users.findById(userInfo.id)
-    await repos.users.upsert({
-        id: userInfo.id,
-        email: userInfo.email,
-        name: userInfo.name || 'Unknown',
-        refresh_token_encrypted: encryptedRefreshToken || (existingUser?.refresh_token_encrypted || null)
-    })
-
-    // 4. APIアクセス用のセッション(JWT)を発行し、HttpOnly Cookieにセット
-    const payload = {
-      sub: userInfo.id,
-      email: userInfo.email,
-      exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24 * 7) // 7日間有効
-    }
-    const sessionToken = await sign(payload, c.env.JWT_SECRET)
-    
-    setCookie(c, 'auth_token', sessionToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'Lax',
-      maxAge: 60 * 60 * 24 * 7
-    })
-    
-    // 認証完了後のパスへリダイレクト（URLパラメータを消すため）
-    return c.redirect('/auth/success')
-  } catch (e: unknown) {
-    console.error('Auth callback error:', e)
-    const message = e instanceof Error ? e.message : String(e)
-    return c.html(`<h1>Authentication Failed</h1><p>${message}</p><a href="/auth/login">Retry</a>`, 500)
+  })
+  
+  if (!tokenResponse.ok) {
+      const err = await tokenResponse.text();
+      throw new Error(`Failed to exchange token: ${err}`)
   }
+
+  const tokenData = await tokenResponse.json()
+  const tokens = GoogleTokenResponseSchema.parse(tokenData)
+
+  // 2. ユーザー情報を取得
+  const userInfoResponse = await fetch(GOOGLE_USERINFO_URL, {
+    headers: { Authorization: `Bearer ${tokens.access_token}` }
+  })
+  const userInfoData = await userInfoResponse.json()
+  const userInfo = GoogleUserInfoSchema.parse(userInfoData)
+  
+  // 3. データベースへ保存 (リフレッシュトークン含め)
+  const repos = createRepositories(c.env.gym_booking_db)
+  
+  // refresh_token が送られてこない場合もあるため（過去に同意済みの場合など）、存在する場合のみ暗号化
+  let encryptedRefreshToken = null;
+  if (tokens.refresh_token) {
+      encryptedRefreshToken = await encryptToken(tokens.refresh_token, c.env.ENCRYPTION_KEY)
+  }
+
+  // ユーザー情報のUpsert（既存ユーザーの場合はリフレッシュトークンが新たに取れたら更新）
+  const existingUser = await repos.users.findById(userInfo.id)
+  await repos.users.upsert({
+      id: userInfo.id,
+      email: userInfo.email,
+      name: userInfo.name || 'Unknown',
+      refresh_token_encrypted: encryptedRefreshToken || (existingUser?.refresh_token_encrypted || null)
+  })
+
+  // 4. APIアクセス用のセッション(JWT)を発行し、HttpOnly Cookieにセット
+  const payload = {
+    sub: userInfo.id,
+    email: userInfo.email,
+    exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24 * 7) // 7日間有効
+  }
+  const sessionToken = await sign(payload, c.env.JWT_SECRET)
+  
+  setCookie(c, 'auth_token', sessionToken, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'Lax',
+    maxAge: 60 * 60 * 24 * 7
+  })
+  
+  // 認証完了後のパスへリダイレクト（URLパラメータを消すため）
+  return c.redirect('/auth/success')
 })
 
 // ログアウト処理
