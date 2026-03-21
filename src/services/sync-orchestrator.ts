@@ -42,7 +42,9 @@ export interface SyncConfig {
  * Gmailからのデータ取得、解析、データベース保存を制御するクラス
  */
 export class SyncOrchestrator {
+    // APIレート制限やリソース消費を抑えるための並列実行数
     private readonly DB_BATCH_SIZE = 5;
+    // 札幌市の施設予約システムからのメールのみを対象とするクエリ
     private readonly GMAIL_QUERY = 'subject:"札幌市公共施設予約情報システム"';
     private readonly repos: Repositories;
 
@@ -56,26 +58,27 @@ export class SyncOrchestrator {
     async sync(): Promise<{ runId: string; success: boolean }> {
         const runId = crypto.randomUUID();
 
-        // 1. 同期実行の開始を記録
+        // 同期実行の開始を記録
         await this.initSyncRun(runId);
 
         try {
-            // Step 1: Gmailから未取得メールを取り込む
+            // Gmailから未取得メールを取り込む（Ingest層）
             const { count: ingestedCount } = await this.ingest();
 
-            // 処理対象件数を更新
+            // 今回の実行で処理すべき総件数を保存
             await this.repos.syncRuns.updateTotalCount(runId, ingestedCount);
 
-            // Step 2: 取り込んだ未処理メールを解析する
+            // 取り込んだ未処理メールを解析する（Process層）
             const { successCount, errorCount } = await this.processPending(runId);
 
-            // 4. 同期全体の最終ステータスを確定
+            // 同期全体の最終ステータスを確定
             await this.finalizeSyncRun(runId, successCount, errorCount);
 
             return { runId, success: true };
 
         } catch (err: unknown) {
             Logger.error(null, 'Fatal error in sync orchestrator', { runId, error: err });
+            // 致命的なエラー時はステータスを FAILURE に設定
             await this.repos.syncRuns.finalize(runId, SYNC_RUN_STATUS.FAILURE, 0, 0);
             return { runId, success: false };
         }
@@ -86,6 +89,7 @@ export class SyncOrchestrator {
     }
 
     private async finalizeSyncRun(runId: string, successCount: number, errorCount: number) {
+        // 全件成功なら SUCCESS、一部成功なら PARTIAL_SUCCESS、全件失敗なら FAILURE
         const finalStatus = errorCount === 0
             ? SYNC_RUN_STATUS.SUCCESS
             : (successCount > 0 ? SYNC_RUN_STATUS.PARTIAL_SUCCESS : SYNC_RUN_STATUS.FAILURE);
@@ -114,13 +118,13 @@ export class SyncOrchestrator {
 
             if (messages.length === 0) break;
 
-            // バッチ処理（5件ずつ並列に詳細を取得）
+            // バッチ処理（5件ずつ並列に詳細を取得してDB負荷を分散）
             for (let i = 0; i < messages.length; i += this.DB_BATCH_SIZE) {
                 if (stopSync) break;
 
                 const batch = messages.slice(i, i + this.DB_BATCH_SIZE);
 
-                // バッチ内のメッセージがDBに存在するか一括チェック
+                // バッチ内のメッセージがDBに存在するか一括チェック（無駄な fetch を防ぐ）
                 const checkResults = await Promise.all(batch.map(async (msg: { id: string }) => {
                     const existing = await this.repos.rawEmails.findById(msg.id);
                     return { msg, existing: !!existing };
@@ -129,7 +133,7 @@ export class SyncOrchestrator {
                 // 未取得分のみ抽出
                 const toFetch = checkResults.filter(r => !r.existing);
 
-                // 既存のメッセージが見つかった場合、このバッチまたは次のバッチで同期を止める
+                // 差分同期：既存のメッセージが見つかった場合、それより過去は取り込み済みと判断してループを抜ける
                 if (checkResults.some(r => r.existing)) {
                     Logger.info(null, 'Found already ingested message. Stopping scan.');
                     stopSync = true;
@@ -156,6 +160,7 @@ export class SyncOrchestrator {
 
                 totalScanned += batch.length;
 
+                // 際限ないスキャンを防ぐための安全装置
                 if (totalScanned >= maxLimit) {
                     Logger.info(null, 'Reached maxLimit. Stopping.', { maxLimit });
                     stopSync = true;
@@ -200,12 +205,13 @@ export class SyncOrchestrator {
         try {
             const parsed = EmailParser.parse(content, row.subject);
 
-            // 解析結果が null の場合は「対象外メール」としてマーク
+            // 解析結果が null の場合は「対象外メール（例：ただの通知メール）」として SKIPPED マーク
             if (!parsed) {
                 await this.repos.rawEmails.updateParseStatus(row.id, PARSE_STATUS.SKIPPED);
                 return true;
             }
 
+            // 予約情報の保存とステータスの更新
             await this.saveBooking(parsed, row.id);
             await this.repos.rawEmails.updateParseStatus(row.id, PARSE_STATUS.SUCCESS);
             await this.logEmailResult(runId, row.id, PARSE_STATUS.SUCCESS, `Status: ${parsed.status}`);
@@ -220,9 +226,10 @@ export class SyncOrchestrator {
     }
 
     /**
-     * 予約情報を bookings テーブルに保存する
+     * 予約情報を bookings テーブルに保存する。登録番号をキーにして Upsert する。
      */
     private async saveBooking(booking: ParsedBooking, rawMailId: string) {
+        // 登録番号がない場合は臨時 ID を生成（通常は存在するはず）
         const id = booking.registration_number || crypto.randomUUID();
 
         await this.repos.bookings.upsert({

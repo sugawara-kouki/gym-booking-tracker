@@ -10,10 +10,15 @@
 src/
 ├── app.ts              # アプリケーションのエントリポイント、ミドルウェア・エラーハンドリングの定義
 ├── index.ts            # Cloudflare Workers のフェッチハンドラー
-├── types.ts            # 共通の型定義（Bindings, Variablesなど）
-├── routes/             # ルーティング（Hono / Zod OpenAPI）
-│   ├── auth.ts         # Google OAuth2 認証、ログイン・ログアウト処理
-│   └── poc.ts          # PoC（概念実証）用のテストエンドポイント
+├── types.ts            # 共通の型定義（Bindings, Variables, AppRouteHandler）
+├── routes/             # 【定義】APIのエンドポイントとバリデーション（OpenAPI）
+│   ├── auth.ts         # Router: auth.schema と auth.handler を結びつける
+│   ├── auth.schema.ts  # Definition: Zodスキーマと Route メタデータ
+│   ├── poc.ts          # Router: poc.schema と poc.handler を結びつける
+│   └── poc.schema.ts   # Definition: Zodスキーマと Route メタデータ
+├── handlers/           # 【実装】Hono Handler の実体 (Contextを受け取る層)
+│   ├── auth.handler.ts # 認証・OAuth処理の具体的なロジック
+│   └── poc.handler.ts  # PoC機能の具体的なロジック
 ├── middleware/         # Hono ミドルウェア
 │   ├── auth.ts         # JWT検証 (checkJwt), ユーザー情報注入 (injectUser)
 │   └── gmail.ts        # GmailService の初期化とトークン管理 (injectGmail)
@@ -45,7 +50,12 @@ src/
 
 ## 3. 基本設計・コーディングルール
 
-### 3.1 認証とトークン管理
+### 3.1 レイヤードアーキテクチャの徹底
+- **Routes (`*.schema.ts`)**: APIの仕様（パス、入力、出力）のみを記述します。
+- **Handlers (`*.handler.ts`)**: `AppRouteHandler` を使用し、リクエストのパース、Serviceの呼び出し、レスポンスの返却を行います。Honoの `Context` に依存する処理はここまでに留めます。
+- **Services**: `Context` に依存しない純粋なロジックを記述します。
+
+### 3.2 認証とトークン管理
 - **セッション保持**: ログイン成功時に独自 JWT を `auth_token` クッキー（HttpOnly, Secure, SameSite=Lax）にセットします。
 - **Google 連携**: 
     - `refresh_token` は初回ログイン時に取得し、DB（`users`テーブル）に暗号化して保存します。
