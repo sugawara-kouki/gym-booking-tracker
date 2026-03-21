@@ -1,3 +1,4 @@
+import { RouteConfig, RouteHandler } from '@hono/zod-openapi'
 import type { UserRow } from './repositories/types'
 import type { GmailService } from './services/gmail'
 
@@ -19,3 +20,5 @@ export type Variables = {
   gmail: GmailService
   requestId: string
 }
+
+export type AppRouteHandler<T extends RouteConfig> = RouteHandler<T, { Bindings: Bindings, Variables: Variables }>
