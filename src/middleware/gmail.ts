@@ -39,6 +39,8 @@ export const injectGmail = createMiddleware<{ Bindings: Bindings, Variables: Var
       const repos = c.get('repos')
       await repos.users.upsert({
         id: user.id,
+        provider: user.provider,
+        provider_user_id: user.provider_user_id,
         email: user.email,
         name: user.name,
         refresh_token_encrypted: user.refresh_token_encrypted,

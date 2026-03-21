@@ -2,11 +2,11 @@ import { getCookie, setCookie } from 'hono/cookie'
 import { GoogleAuthService } from '../services/google-auth'
 import { AuthService } from '../services/auth'
 import type { AppRouteHandler } from '../types'
-import { 
-  loginRoute, 
-  googleAuthRoute, 
-  googleCallbackRoute, 
-  successRoute, 
+import {
+  loginRoute,
+  googleAuthRoute,
+  googleCallbackRoute,
+  successRoute,
   logoutRoute
 } from '../routes/auth.schema'
 
@@ -44,14 +44,14 @@ export const loginHandler: AppRouteHandler<typeof loginRoute> = (c) => {
 export const googleAuthHandler: AppRouteHandler<typeof googleAuthRoute> = (c) => {
   const url = new URL(c.req.url)
   const redirectUri = `${url.protocol}//${url.host}/auth/google/callback`
-  
+
   // CSRF対策用の一時的なステートを生成し Cookie に保存
   const state = crypto.randomUUID()
   setCookie(c, 'oauth_state', state, { httpOnly: true, secure: true, maxAge: 60 * 10 })
-  
+
   const googleAuth = new GoogleAuthService(c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET)
   const authUrl = googleAuth.getAuthUrl(redirectUri, state)
-  
+
   return c.redirect(authUrl)
 }
 
@@ -63,17 +63,17 @@ export const googleCallbackHandler: AppRouteHandler<typeof googleCallbackRoute> 
   const code = url.searchParams.get('code')
   const state = url.searchParams.get('state')
   const error = url.searchParams.get('error')
-  
+
   if (error) {
     return c.text(`認証エラーが発生しました: ${error}`, 400)
   }
-  
+
   // 以前生成した state と比較して CSRF 攻撃を防ぐ
   const savedState = getCookie(c, 'oauth_state')
   if (!code || !state || state !== savedState) {
     return c.text('不正なリクエストです (State不一致 または Codeなし)', 400)
   }
-  
+
   const redirectUri = `${url.protocol}//${url.host}/auth/google/callback`
   const googleAuth = new GoogleAuthService(c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET)
   const authService = new AuthService(c.get('repos'), c.env.ENCRYPTION_KEY, c.env.JWT_SECRET)
@@ -83,7 +83,7 @@ export const googleCallbackHandler: AppRouteHandler<typeof googleCallbackRoute> 
 
   // アクセストークンを使用してプロフィール取得 (プロバイダー固有の処理)
   const profile = await googleAuth.fetchUserInfo(tokens.access_token)
-  
+
   // ユーザー情報の保存・更新 (汎用インターフェースへのマッピング)
   const user = await authService.loginOrUpdateUser(
     {
@@ -101,7 +101,7 @@ export const googleCallbackHandler: AppRouteHandler<typeof googleCallbackRoute> 
 
   // アプリケーション独自のセッション管理用 JWT を発行
   const sessionToken = await authService.createSessionToken({ id: user.id, email: user.email })
-  
+
   // セキュアな HttpOnly Cookie に JWT を保存
   setCookie(c, 'auth_token', sessionToken, {
     httpOnly: true,
@@ -109,7 +109,7 @@ export const googleCallbackHandler: AppRouteHandler<typeof googleCallbackRoute> 
     sameSite: 'Lax',
     maxAge: 60 * 60 * 24 * 7
   })
-  
+
   // URLから機密パラメータを取り除くため、成功画面へリダイレクト
   return c.redirect('/auth/success')
 }

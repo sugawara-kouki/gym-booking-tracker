@@ -110,11 +110,11 @@ export class GmailService {
         }
 
         const data = await response.json();
-        const { access_token, expires_in } = z.object({ 
+        const { access_token, expires_in } = z.object({
             access_token: z.string(),
             expires_in: z.number()
         }).parse(data);
-        
+
         const newExpiresAt = Math.floor(Date.now() / 1000) + expires_in;
         this.accessToken = access_token;
         this.expiresAt = newExpiresAt;

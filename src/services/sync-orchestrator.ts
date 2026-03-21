@@ -40,6 +40,7 @@ export interface SyncConfig {
 
 /**
  * Gmailからのデータ取得、解析、データベース保存を制御するクラス
+ * 今回のアップデートでマルチテナント（userId）対応となりました。
  */
 export class SyncOrchestrator {
     // APIレート制限やリソース消費を抑えるための並列実行数
@@ -49,7 +50,7 @@ export class SyncOrchestrator {
     private readonly repos: Repositories;
     private readonly gmail: GmailService;
 
-    constructor(private readonly env: Bindings, gmailService: GmailService) {
+    constructor(private readonly env: Bindings, private readonly userId: string, gmailService: GmailService) {
         this.repos = createRepositories(env.gym_booking_db);
         this.gmail = gmailService;
     }
@@ -68,7 +69,7 @@ export class SyncOrchestrator {
             const { count: ingestedCount } = await this.ingest();
 
             // 今回の実行で処理すべき総件数を保存
-            await this.repos.syncRuns.updateTotalCount(runId, ingestedCount);
+            await this.repos.syncRuns.updateTotalCount(this.userId, runId, ingestedCount);
 
             // 取り込んだ未処理メールを解析する（Process層）
             const { successCount, errorCount } = await this.processPending(runId);
@@ -81,13 +82,13 @@ export class SyncOrchestrator {
         } catch (err: unknown) {
             Logger.error(null, 'Fatal error in sync orchestrator', { runId, error: err });
             // 致命的なエラー時はステータスを FAILURE に設定
-            await this.repos.syncRuns.finalize(runId, SYNC_RUN_STATUS.FAILURE, 0, 0);
+            await this.repos.syncRuns.finalize(this.userId, runId, SYNC_RUN_STATUS.FAILURE, 0, 0);
             return { runId, success: false };
         }
     }
 
     private async initSyncRun(runId: string) {
-        await this.repos.syncRuns.create(runId);
+        await this.repos.syncRuns.create(this.userId, runId);
     }
 
     private async finalizeSyncRun(runId: string, successCount: number, errorCount: number) {
@@ -96,7 +97,7 @@ export class SyncOrchestrator {
             ? SYNC_RUN_STATUS.SUCCESS
             : (successCount > 0 ? SYNC_RUN_STATUS.PARTIAL_SUCCESS : SYNC_RUN_STATUS.FAILURE);
 
-        await this.repos.syncRuns.finalize(runId, finalStatus, successCount, errorCount);
+        await this.repos.syncRuns.finalize(this.userId, runId, finalStatus, successCount, errorCount);
     }
 
     /**
@@ -105,7 +106,7 @@ export class SyncOrchestrator {
      * すでにDBに存在するメッセージIDに遭遇した時点で、それ以降（過去分）は同期済みと見なし終了する（差分同期）。
      */
     async ingest(maxLimit: number = 2000): Promise<{ count: number }> {
-        Logger.info(null, 'Starting ingest process', { query: this.GMAIL_QUERY });
+        Logger.info(null, 'Starting ingest process', { query: this.GMAIL_QUERY, userId: this.userId });
         let ingested = 0;
         let pageToken: string | undefined = undefined;
         let totalScanned = 0;
@@ -127,7 +128,7 @@ export class SyncOrchestrator {
 
                 // バッチ内のメッセージがDBに存在するか一括チェック（無駄な fetch を防ぐ）
                 const checkResults = await Promise.all(batch.map(async (msg: { id: string }) => {
-                    const existing = await this.repos.rawEmails.findById(msg.id);
+                    const existing = await this.repos.rawEmails.findById(this.userId, msg.id);
                     return { msg, existing: !!existing };
                 }));
 
@@ -136,7 +137,7 @@ export class SyncOrchestrator {
 
                 // 差分同期：既存のメッセージが見つかった場合、それより過去は取り込み済みと判断してループを抜ける
                 if (checkResults.some(r => r.existing)) {
-                    Logger.info(null, 'Found already ingested message. Stopping scan.');
+                    Logger.info(null, 'Found already ingested message. Stopping scan.', { userId: this.userId });
                     stopSync = true;
                 }
 
@@ -144,7 +145,7 @@ export class SyncOrchestrator {
                     await Promise.all(toFetch.map(async ({ msg }) => {
                         try {
                             const detail = await this.gmail.getMessage(msg.id);
-                            await this.repos.rawEmails.create({
+                            await this.repos.rawEmails.create(this.userId, {
                                 id: detail.id,
                                 thread_id: detail.threadId,
                                 subject: detail.subject,
@@ -154,7 +155,7 @@ export class SyncOrchestrator {
                             });
                             ingested++;
                         } catch (err) {
-                            Logger.error(null, 'Failed to fetch/save message', { messageId: msg.id, error: err });
+                            Logger.error(null, 'Failed to fetch/save message', { messageId: msg.id, userId: this.userId, error: err });
                         }
                     }));
                 }
@@ -163,7 +164,7 @@ export class SyncOrchestrator {
 
                 // 際限ないスキャンを防ぐための安全装置
                 if (totalScanned >= maxLimit) {
-                    Logger.info(null, 'Reached maxLimit. Stopping.', { maxLimit });
+                    Logger.info(null, 'Reached maxLimit. Stopping.', { maxLimit, userId: this.userId });
                     stopSync = true;
                     break;
                 }
@@ -174,7 +175,7 @@ export class SyncOrchestrator {
             }
         } while (pageToken);
 
-        Logger.info(null, 'Ingest finished', { ingested, totalScanned });
+        Logger.info(null, 'Ingest finished', { ingested, totalScanned, userId: this.userId });
         return { count: ingested };
     }
 
@@ -182,9 +183,9 @@ export class SyncOrchestrator {
      * raw_emails テーブルの未処理データを解析し、bookings テーブルに反映する。
      */
     async processPending(runId: string): Promise<{ successCount: number; errorCount: number }> {
-        const results = await this.repos.rawEmails.findPending();
+        const results = await this.repos.rawEmails.findPending(this.userId);
 
-        Logger.info(null, 'Found emails to process', { count: results.length, runId });
+        Logger.info(null, 'Found emails to process', { count: results.length, runId, userId: this.userId });
 
         let successCount = 0;
         let errorCount = 0;
@@ -208,19 +209,19 @@ export class SyncOrchestrator {
 
             // 解析結果が null の場合は「対象外メール（例：ただの通知メール）」として SKIPPED マーク
             if (!parsed) {
-                await this.repos.rawEmails.updateParseStatus(row.id, PARSE_STATUS.SKIPPED);
+                await this.repos.rawEmails.updateParseStatus(this.userId, row.id, PARSE_STATUS.SKIPPED);
                 return true;
             }
 
             // 予約情報の保存とステータスの更新
             await this.saveBooking(parsed, row.id);
-            await this.repos.rawEmails.updateParseStatus(row.id, PARSE_STATUS.SUCCESS);
+            await this.repos.rawEmails.updateParseStatus(this.userId, row.id, PARSE_STATUS.SUCCESS);
             await this.logEmailResult(runId, row.id, PARSE_STATUS.SUCCESS, `Status: ${parsed.status}`);
             return true;
 
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : String(err);
-            await this.repos.rawEmails.updateParseStatus(row.id, PARSE_STATUS.FAIL);
+            await this.repos.rawEmails.updateParseStatus(this.userId, row.id, PARSE_STATUS.FAIL);
             await this.logEmailResult(runId, row.id, 'error', `FAIL: ${msg}`);
             return false;
         }
@@ -233,13 +234,14 @@ export class SyncOrchestrator {
         // 登録番号がない場合は臨時 ID を生成（通常は存在するはず）
         const id = booking.registration_number || crypto.randomUUID();
 
-        await this.repos.bookings.upsert({
+        await this.repos.bookings.upsert(this.userId, {
             id,
             facility_name: booking.facility_name,
             event_date: booking.event_date,
             event_end_date: booking.event_end_date || null,
             registration_number: booking.registration_number || null,
             purpose: booking.purpose || null,
+            court_info: booking.court_info || null,
             status: booking.status,
             raw_mail_id: rawMailId,
         });
@@ -249,7 +251,7 @@ export class SyncOrchestrator {
      * 各メールの処理結果を個別ログ (sync_logs) に記録する
      */
     private async logEmailResult(runId: string, mailId: string, status: string, errorDetail?: string) {
-        await this.repos.syncLogs.create({
+        await this.repos.syncLogs.create(this.userId, {
             id: crypto.randomUUID(),
             sync_run_id: runId,
             raw_mail_id: mailId,

@@ -44,29 +44,29 @@ export async function encryptToken(text: string, secretStr: string): Promise<str
         key,
         enc.encode(text)
     );
-    
+
     // IV (12bytes) と 暗号化データ を結合
     const combined = new Uint8Array(iv.length + encrypted.byteLength);
     combined.set(iv, 0);
     combined.set(new Uint8Array(encrypted), iv.length);
-    
+
     return arrayBufferToBase64(combined);
 }
 
 export async function decryptToken(encryptedBase64: string, secretStr: string): Promise<string> {
     const key = await getKey(secretStr);
     const combined = base64ToArrayBuffer(encryptedBase64);
-    
+
     // 先頭12bytesをIVとして切り出し
     const iv = combined.slice(0, 12);
     const data = combined.slice(12);
-    
+
     const decrypted = await crypto.subtle.decrypt(
         { name: 'AES-GCM', iv },
         key,
         data
     );
-    
+
     const dec = new TextDecoder();
     return dec.decode(decrypted);
 }

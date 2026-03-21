@@ -9,6 +9,7 @@ export type SyncRunStatus = BaseSyncRunStatus;
 
 export interface RawEmailRow {
     id: string;
+    user_id: string; // 所有者
     thread_id: string;
     subject: string;
     snippet: string;
@@ -19,6 +20,7 @@ export interface RawEmailRow {
 
 export interface SyncRunRow {
     id: string;
+    user_id: string; // 実行者
     status: SyncRunStatus;
     total_count: number;
     success_count: number;
@@ -41,11 +43,13 @@ export interface UserRow {
 
 export interface BookingRow {
     id: string;
+    user_id: string; // 所有者
     facility_name: string;
     event_date: string;
     event_end_date: string | null;
     registration_number: string | null;
     purpose: string | null;
+    court_info: string | null;
     status: string;
     raw_mail_id: string;
     updated_at: number;
@@ -53,6 +57,7 @@ export interface BookingRow {
 
 export interface SyncLogRow {
     id: string;
+    user_id: string; // 所有者
     sync_run_id: string;
     raw_mail_id: string;
     status: string;
@@ -73,27 +78,35 @@ export interface UserRepository {
  */
 
 export interface BookingRepository {
-    upsert(booking: Omit<BookingRow, 'updated_at'>): Promise<void>;
-    findAll(): Promise<BookingRow[]>;
-    deleteAll(): Promise<void>;
+    upsert(userId: string, booking: Omit<BookingRow, 'user_id' | 'updated_at'>): Promise<void>;
+    findAll(userId: string): Promise<BookingRow[]>;
+    deleteAll(userId: string): Promise<void>; // ユーザー単位での削除安全性を確保
 }
 
 export interface RawEmailRepository {
-    findById(id: string): Promise<RawEmailRow | null>;
-    create(email: Omit<RawEmailRow, 'fetched_at'>): Promise<void>;
-    updateParseStatus(id: string, status: ParseStatus): Promise<void>;
-    findPending(): Promise<RawEmailRow[]>;
-    deleteAll(): Promise<void>;
+    findById(userId: string, id: string): Promise<RawEmailRow | null>;
+    create(userId: string, email: Omit<RawEmailRow, 'user_id' | 'fetched_at'>): Promise<void>;
+    updateParseStatus(userId: string, id: string, status: ParseStatus): Promise<void>;
+    findPending(userId: string): Promise<RawEmailRow[]>;
+    deleteAll(userId: string): Promise<void>;
 }
 
 export interface SyncRunRepository {
-    create(runId: string): Promise<void>;
-    updateTotalCount(runId: string, totalCount: number): Promise<void>;
-    finalize(runId: string, status: SyncRunStatus, successCount: number, errorCount: number): Promise<void>;
-    deleteAll(): Promise<void>;
+    create(userId: string, runId: string): Promise<void>;
+    updateTotalCount(userId: string, runId: string, totalCount: number): Promise<void>;
+    finalize(userId: string, runId: string, status: SyncRunStatus, successCount: number, errorCount: number): Promise<void>;
+    deleteAll(userId: string): Promise<void>;
 }
 
 export interface SyncLogRepository {
-    create(log: SyncLogRow): Promise<void>;
-    deleteAll(): Promise<void>;
+    create(userId: string, log: Omit<SyncLogRow, 'user_id'>): Promise<void>;
+    deleteAll(userId: string): Promise<void>;
+}
+
+export interface Repositories {
+    users: UserRepository;
+    bookings: BookingRepository;
+    rawEmails: RawEmailRepository;
+    syncRuns: SyncRunRepository;
+    syncLogs: SyncLogRepository;
 }

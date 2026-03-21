@@ -20,7 +20,7 @@ app.use('*', async (c, next) => {
   const start = Date.now()
   await next()
   const end = Date.now()
-  
+
   Logger.info(c, 'Request completed', {
     method: c.req.method,
     path: c.req.path,

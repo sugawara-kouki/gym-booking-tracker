@@ -30,7 +30,7 @@ export class AuthService {
     private readonly repos: Repositories,
     private readonly encryptionKey: string,
     private readonly jwtSecret: string
-  ) {}
+  ) { }
 
   /**
    * 外部プロバイダーから取得したプロフィールとトークンをもとに、ユーザー情報を保存・更新する
@@ -58,8 +58,8 @@ export class AuthService {
       refresh_token_encrypted: encryptedRefreshToken || (existingUser?.refresh_token_encrypted || null),
       // 短期的なアクセストークンも再利用・リフレッシュ抑制のためにキャッシュ
       access_token_encrypted: await encryptToken(tokens.accessToken, this.encryptionKey),
-      access_token_expires_at: tokens.expiresIn 
-        ? Math.floor(Date.now() / 1000) + tokens.expiresIn 
+      access_token_expires_at: tokens.expiresIn
+        ? Math.floor(Date.now() / 1000) + tokens.expiresIn
         : (existingUser?.access_token_expires_at || 0)
     }
 

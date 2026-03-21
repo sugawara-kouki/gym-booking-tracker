@@ -24,6 +24,8 @@ export interface ParsedBooking {
     registration_number?: string;
     /** 利用目的 */
     purpose?: string;
+    /** コート情報等 */
+    court_info?: string;
     /** 予約ステータス */
     status: BookingStatus;
 }
