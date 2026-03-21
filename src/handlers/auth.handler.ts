@@ -1,6 +1,5 @@
 import { getCookie, setCookie } from 'hono/cookie'
 import { sign } from 'hono/jwt'
-import { createRepositories } from '../repositories'
 import { encryptToken } from '../utils/crypto'
 import type { AppRouteHandler } from '../types'
 import { 
@@ -121,7 +120,7 @@ export const googleCallbackHandler: AppRouteHandler<typeof googleCallbackRoute> 
   const userInfoData = await userInfoResponse.json()
   const userInfo = GoogleUserInfoSchema.parse(userInfoData)
   
-  const repos = createRepositories(c.env.gym_booking_db)
+  const repos = c.get('repos')
   
   // refresh_token が返ってきた場合のみ暗号化して保存（2回目以降のログインでは返ってこない場合がある）
   let encryptedRefreshToken = null;

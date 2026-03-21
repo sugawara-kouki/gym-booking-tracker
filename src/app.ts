@@ -7,12 +7,14 @@ import { requestId } from 'hono/request-id'
 import { HTTPException } from 'hono/http-exception'
 import { ERROR_CODES } from './utils/error'
 import { Logger } from './utils/logger'
+import { injectRepos } from './middleware/db'
 import type { Bindings, Variables } from './types'
 
 export const app = new OpenAPIHono<{ Bindings: Bindings, Variables: Variables }>()
 
 // グローバルミドルウェアの設定
 app.use('*', requestId())
+app.use('*', injectRepos)
 
 // カスタム構造化ロガー
 app.use('*', async (c, next) => {

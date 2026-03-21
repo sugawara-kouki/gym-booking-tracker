@@ -1,5 +1,4 @@
 import { SyncOrchestrator, SYNC_RUN_STATUS } from '../services/sync-orchestrator'
-import { createRepositories } from '../repositories'
 import type { AppRouteHandler } from '../types'
 import { 
   emailsRoute, 
@@ -29,7 +28,7 @@ export const emailsHandler: AppRouteHandler<typeof emailsRoute> = async (c) => {
  * ※開発・デバッグ用。本番環境では注意が必要
  */
 export const dbClearHandler: AppRouteHandler<typeof dbClearRoute> = async (c) => {
-  const repos = createRepositories(c.env.gym_booking_db)
+  const repos = c.get('repos')
   
   // 依存関係を考慮し、関連テーブルから順に全てのレコードを消去
   await repos.syncLogs.deleteAll()
@@ -49,7 +48,7 @@ export const dbClearHandler: AppRouteHandler<typeof dbClearRoute> = async (c) =>
  * 現在保存されている予約一覧をそのまま取得する
  */
 export const dbTestHandler: AppRouteHandler<typeof dbTestRoute> = async (c) => {
-  const repos = createRepositories(c.env.gym_booking_db)
+  const repos = c.get('repos')
   const results = await repos.bookings.findAll()
 
   return c.json({
@@ -81,7 +80,7 @@ export const ingestHandler: AppRouteHandler<typeof ingestRoute> = async (c) => {
  */
 export const parsePendingHandler: AppRouteHandler<typeof parsePendingRoute> = async (c) => {
   const orchestrator = new SyncOrchestrator(c.env)
-  const repos = createRepositories(c.env.gym_booking_db)
+  const repos = c.get('repos')
   
   // 同期実行の記録を開始
   const runId = crypto.randomUUID()

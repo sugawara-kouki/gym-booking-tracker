@@ -35,9 +35,8 @@ export const injectGmail = createMiddleware<{ Bindings: Bindings, Variables: Var
     expiresAt: user.access_token_expires_at,
     onTokenRefresh: async (newToken, expiresAt) => {
       const { encryptToken } = await import('../utils/crypto')
-      const { createRepositories } = await import('../repositories')
       const encrypted = await encryptToken(newToken, c.env.ENCRYPTION_KEY)
-      const repos = createRepositories(c.env.gym_booking_db)
+      const repos = c.get('repos')
       await repos.users.upsert({
         id: user.id,
         email: user.email,

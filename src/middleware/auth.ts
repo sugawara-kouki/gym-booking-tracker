@@ -1,10 +1,10 @@
 import { createMiddleware } from 'hono/factory'
 import { jwt } from 'hono/jwt'
-import { createRepositories } from '../repositories'
 import type { Bindings, Variables } from '../types'
 
 /**
  * JWTのペイロードをもとに、DBからユーザー情報を取得して Context にセットするミドルウェア
+ * ※ injectRepos の後に実行される必要があります
  */
 export const injectUser = createMiddleware<{ Bindings: Bindings, Variables: Variables }>(async (c, next) => {
   const payload = c.get('jwtPayload')
@@ -13,7 +13,7 @@ export const injectUser = createMiddleware<{ Bindings: Bindings, Variables: Vari
   }
 
   const userId = payload.sub
-  const repos = createRepositories(c.env.gym_booking_db)
+  const repos = c.get('repos')
   const user = await repos.users.findById(userId)
 
   if (!user) {
