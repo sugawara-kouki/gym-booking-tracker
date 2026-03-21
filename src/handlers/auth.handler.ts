@@ -1,20 +1,14 @@
 import { getCookie, setCookie } from 'hono/cookie'
-import { sign } from 'hono/jwt'
-import { encryptToken } from '../utils/crypto'
+import { GoogleAuthService } from '../services/google-auth'
+import { AuthService } from '../services/auth'
 import type { AppRouteHandler } from '../types'
 import { 
   loginRoute, 
   googleAuthRoute, 
   googleCallbackRoute, 
   successRoute, 
-  logoutRoute,
-  GoogleTokenResponseSchema,
-  GoogleUserInfoSchema 
+  logoutRoute
 } from '../routes/auth.schema'
-
-const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
-const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
-const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v2/userinfo'
 
 /**
  * ログイン画面（HTML）を表示するハンドラー
@@ -55,20 +49,10 @@ export const googleAuthHandler: AppRouteHandler<typeof googleAuthRoute> = (c) =>
   const state = crypto.randomUUID()
   setCookie(c, 'oauth_state', state, { httpOnly: true, secure: true, maxAge: 60 * 10 })
   
-  const params = new URLSearchParams({
-    client_id: c.env.GOOGLE_CLIENT_ID,
-    redirect_uri: redirectUri,
-    response_type: 'code',
-    // gmail.readonly 権限を要求
-    scope: 'openid profile email https://www.googleapis.com/auth/gmail.readonly',
-    // リフレッシュトークンを取得するため必須設定
-    access_type: 'offline',
-    // 常に同意画面を表示させることで、リフレッシュトークンの再発行を確実にする手法
-    prompt: 'consent',
-    state: state
-  })
+  const googleAuth = new GoogleAuthService(c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET)
+  const authUrl = googleAuth.getAuthUrl(redirectUri, state)
   
-  return c.redirect(`${GOOGLE_AUTH_URL}?${params.toString()}`)
+  return c.redirect(authUrl)
 }
 
 /**
@@ -91,62 +75,31 @@ export const googleCallbackHandler: AppRouteHandler<typeof googleCallbackRoute> 
   }
   
   const redirectUri = `${url.protocol}//${url.host}/auth/google/callback`
+  const googleAuth = new GoogleAuthService(c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET)
+  const authService = new AuthService(c.get('repos'), c.env.ENCRYPTION_KEY, c.env.JWT_SECRET)
 
-  // 認可コードをアクセストークン等と交換
-  const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: c.env.GOOGLE_CLIENT_ID,
-      client_secret: c.env.GOOGLE_CLIENT_SECRET,
-      code,
-      redirect_uri: redirectUri,
-      grant_type: 'authorization_code'
-    })
-  })
+  // 認可コードをトークンと交換 (プロバイダー固有の処理)
+  const tokens = await googleAuth.exchangeCodeForTokens(code, redirectUri)
+
+  // アクセストークンを使用してプロフィール取得 (プロバイダー固有の処理)
+  const profile = await googleAuth.fetchUserInfo(tokens.access_token)
   
-  if (!tokenResponse.ok) {
-    const err = await tokenResponse.text();
-    throw new Error(`Failed to exchange token: ${err}`)
-  }
-
-  const tokenData = await tokenResponse.json()
-  const tokens = GoogleTokenResponseSchema.parse(tokenData)
-
-  // アクセストークンを使用してユーザーの基本情報を取得
-  const userInfoResponse = await fetch(GOOGLE_USERINFO_URL, {
-    headers: { Authorization: `Bearer ${tokens.access_token}` }
-  })
-  const userInfoData = await userInfoResponse.json()
-  const userInfo = GoogleUserInfoSchema.parse(userInfoData)
-  
-  const repos = c.get('repos')
-  
-  // refresh_token が返ってきた場合のみ暗号化して保存（2回目以降のログインでは返ってこない場合がある）
-  let encryptedRefreshToken = null;
-  if (tokens.refresh_token) {
-    encryptedRefreshToken = await encryptToken(tokens.refresh_token, c.env.ENCRYPTION_KEY)
-  }
-
-  // ユーザー情報の保存。既存ユーザーの場合は、取得できた場合のみ refresh_token を更新する
-  const existingUser = await repos.users.findById(userInfo.id)
-  await repos.users.upsert({
-    id: userInfo.id,
-    email: userInfo.email,
-    name: userInfo.name || 'Unknown',
-    refresh_token_encrypted: encryptedRefreshToken || (existingUser?.refresh_token_encrypted || null),
-    // パフォーマンス向上のため短期的なアクセストークンもキャッシュ
-    access_token_encrypted: await encryptToken(tokens.access_token, c.env.ENCRYPTION_KEY),
-    access_token_expires_at: Math.floor(Date.now() / 1000) + tokens.expires_in
-  })
+  // ユーザー情報の保存・更新 (汎用インターフェースへのマッピング)
+  const user = await authService.loginOrUpdateUser(
+    {
+      id: profile.id,
+      email: profile.email,
+      name: profile.name || 'Unknown'
+    },
+    {
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      expiresIn: tokens.expires_in
+    }
+  )
 
   // アプリケーション独自のセッション管理用 JWT を発行
-  const payload = {
-    sub: userInfo.id,
-    email: userInfo.email,
-    exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24 * 7) // 7日間有効
-  }
-  const sessionToken = await sign(payload, c.env.JWT_SECRET)
+  const sessionToken = await authService.createSessionToken({ id: user.id, email: user.email })
   
   // セキュアな HttpOnly Cookie に JWT を保存
   setCookie(c, 'auth_token', sessionToken, {
