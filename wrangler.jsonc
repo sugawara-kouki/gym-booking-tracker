@@ -9,12 +9,7 @@
 			"database_name": "gym-booking-db",
 			"database_id": "b33b7a0c-c580-4c15-938d-43c662b7649e"
 		}
-	],
-	"triggers": {
-		"crons": [
-			"0 * * * *"
-		] // Run every hour
-	}
+	]
 	// "compatibility_flags": [
 	//   "nodejs_compat"
 	// ],
