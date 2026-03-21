@@ -4,10 +4,9 @@ import { poc } from './routes/poc'
 import { auth } from './routes/auth'
 import { cors } from 'hono/cors'
 import { requestId } from 'hono/request-id'
-import { HTTPException } from 'hono/http-exception'
-import { ERROR_CODES } from './utils/error'
-import { Logger } from './utils/logger'
 import { injectRepos } from './middleware/db'
+import { errorHandler } from './handlers/error.handler'
+import { Logger } from './utils/logger'
 import type { Bindings, Variables } from './types'
 
 export const app = new OpenAPIHono<{ Bindings: Bindings, Variables: Variables }>()
@@ -44,31 +43,7 @@ app.route('/poc', poc)
 app.route('/auth', auth)
 
 // グローバルエラーハンドリング
-app.onError((err, c) => {
-  Logger.error(c, 'Unhandled exception occurred', { error: err })
-
-  // HTTPException の場合は、設定されているレスポンスをそのまま返すか、
-  // なければステータスコードを尊重して整形して返す
-  if (err instanceof HTTPException) {
-    if (err.res) return err.res
-    return c.json({
-      success: false,
-      error: {
-        code: ERROR_CODES.INTERNAL_SERVER_ERROR,
-        message: err.message
-      }
-    }, err.status)
-  }
-
-  // それ以外の予期せぬエラーは 500 固定
-  return c.json({
-    success: false,
-    error: {
-      code: ERROR_CODES.INTERNAL_SERVER_ERROR,
-      message: err instanceof Error ? err.message : 'Internal Server Error'
-    }
-  }, 500)
-})
+app.onError(errorHandler)
 
 // OpenAPI / Swagger UI の設定
 app.openAPIRegistry.registerComponent('securitySchemes', 'cookieAuth', {

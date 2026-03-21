@@ -18,6 +18,7 @@ src/
 │   └── poc.schema.ts   # Definition: Zodスキーマと Route メタデータ
 ├── handlers/           # 【実装】Hono Handler の実体 (Contextを受け取る層)
 │   ├── auth.handler.ts # 認証・OAuth処理の具体的なロジック
+│   ├── error.handler.ts # グローバルエラーハンドリングの実装
 │   └── poc.handler.ts  # PoC機能の具体的なロジック
 ├── middleware/         # Hono ミドルウェア
 │   ├── auth.ts         # JWT検証 (checkJwt), ユーザー情報注入 (injectUser)
