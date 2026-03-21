@@ -6,7 +6,8 @@ import { Repositories } from '../repositories'
  * プロバイダー（Google, Apple等）に依存しない抽象化されたプロフィール
  */
 export interface AuthProfile {
-  id: string;
+  provider: string; // 'google', 'apple' など
+  id: string; // プロバイダー側での一意な ID
   email: string;
   name: string;
 }
@@ -35,7 +36,11 @@ export class AuthService {
    * 外部プロバイダーから取得したプロフィールとトークンをもとに、ユーザー情報を保存・更新する
    */
   async loginOrUpdateUser(profile: AuthProfile, tokens: AuthTokens) {
-    const existingUser = await this.repos.users.findById(profile.id)
+    // まずプロバイダー名とプロバイダー側の ID で既存ユーザーを探す
+    const existingUser = await this.repos.users.findByProviderId(profile.provider, profile.id)
+
+    // 新規ユーザーの場合は内部 ID (UUID) を発行、既存ならその ID を継続
+    const internalId = existingUser ? existingUser.id : crypto.randomUUID()
 
     // リフレッシュトークンは初回のみ送られてくるケースがあるため取得時のみ更新、
     // そうでない場合は既存のものを破棄せずに維持する
@@ -45,7 +50,9 @@ export class AuthService {
     }
 
     const userData = {
-      id: profile.id,
+      id: internalId,
+      provider: profile.provider,
+      provider_user_id: profile.id,
       email: profile.email,
       name: profile.name,
       refresh_token_encrypted: encryptedRefreshToken || (existingUser?.refresh_token_encrypted || null),
@@ -56,6 +63,7 @@ export class AuthService {
         : (existingUser?.access_token_expires_at || 0)
     }
 
+    // ON CONFLICT(provider, provider_user_id) に基づいて upsert される
     await this.repos.users.upsert(userData)
     return userData
   }
@@ -65,7 +73,7 @@ export class AuthService {
    */
   async createSessionToken(user: { id: string; email: string }) {
     const payload = {
-      sub: user.id,
+      sub: user.id, // 内部 ID (UUID) をサブジェクトにする
       email: user.email,
       exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24 * 7) // 7日間有効
     }

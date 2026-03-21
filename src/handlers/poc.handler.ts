@@ -63,7 +63,7 @@ export const dbTestHandler: AppRouteHandler<typeof dbTestRoute> = async (c) => {
  * インボックスから対象メールを探し、生の本文をDBへ保存するまでを行う
  */
 export const ingestHandler: AppRouteHandler<typeof ingestRoute> = async (c) => {
-  const orchestrator = new SyncOrchestrator(c.env)
+  const orchestrator = new SyncOrchestrator(c.env, c.get('gmail'))
   // 最大500件まで遡ってスキャン
   const result = await orchestrator.ingest(500)
 
@@ -79,7 +79,7 @@ export const ingestHandler: AppRouteHandler<typeof ingestRoute> = async (c) => {
  * 保存済みの生のメール本文を順次解析し、予約テーブルへ正規化して保存する
  */
 export const parsePendingHandler: AppRouteHandler<typeof parsePendingRoute> = async (c) => {
-  const orchestrator = new SyncOrchestrator(c.env)
+  const orchestrator = new SyncOrchestrator(c.env, c.get('gmail'))
   const repos = c.get('repos')
   
   // 同期実行の記録を開始
@@ -104,7 +104,7 @@ export const parsePendingHandler: AppRouteHandler<typeof parsePendingRoute> = as
  * フル同期処理（取り込み＋解析）を一括で実行するハンドラー
  */
 export const syncHandler: AppRouteHandler<typeof syncRoute> = async (c) => {
-  const orchestrator = new SyncOrchestrator(c.env)
+  const orchestrator = new SyncOrchestrator(c.env, c.get('gmail'))
   const result = await orchestrator.sync()
 
   return c.json({

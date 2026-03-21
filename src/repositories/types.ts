@@ -27,9 +27,11 @@ export interface SyncRunRow {
 }
 
 export interface UserRow {
-    id: string;
+    id: string; // 内部的な UUID
+    provider: string; // 'google' など
+    provider_user_id: string; // プロバイダー側での一意な ID
     email: string;
-    name: string;
+    name: string | null;
     refresh_token_encrypted: string | null;
     access_token_encrypted: string | null;
     access_token_expires_at: number | null;
@@ -62,6 +64,7 @@ export interface SyncLogRow {
  */
 export interface UserRepository {
     findById(id: string): Promise<UserRow | null>;
+    findByProviderId(provider: string, providerUserId: string): Promise<UserRow | null>;
     upsert(user: Omit<UserRow, 'created_at' | 'updated_at'>): Promise<void>;
 }
 

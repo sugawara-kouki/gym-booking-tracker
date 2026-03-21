@@ -87,6 +87,7 @@ export const googleCallbackHandler: AppRouteHandler<typeof googleCallbackRoute> 
   // ユーザー情報の保存・更新 (汎用インターフェースへのマッピング)
   const user = await authService.loginOrUpdateUser(
     {
+      provider: 'google',
       id: profile.id,
       email: profile.email,
       name: profile.name || 'Unknown'

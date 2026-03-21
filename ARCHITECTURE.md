@@ -54,16 +54,18 @@ src/
 ### 3.1 レイヤードアーキテクチャの徹底
 - **Routes (`*.schema.ts`)**: APIの仕様（パス、入力、出力）のみを記述します。
 - **Handlers (`*.handler.ts`)**: `AppRouteHandler` を使用し、リクエストのパース、Serviceの呼び出し、レスポンスの返却を行います。Honoの `Context` に依存する処理はここまでに留めます。
-- **Services**: `Context` に依存しない純粋なロジックを記述します。
 
-### 3.2 認証とトークン管理
-- **セッション保持**: ログイン成功時に独自 JWT を `auth_token` クッキー（HttpOnly, Secure, SameSite=Lax）にセットします。
+### 3.2 認証とユーザー管理
+- **AuthService**: 認証プロバイダー（Google等）から提供される情報を正規化し、内部的な **UUID** を発行してユーザーを管理します。
+- **ID設計**: 外部プロバイダーの ID (`provider_user_id`) は内部 ID (`id`) と切り離して管理されます。これにより、複数プロバイダーの統合や、プロバイダー変更への耐性を確保しています。
+- **セッション保持**: アプリケーション独自の JWT を発行し、`auth_token` クッキー（HttpOnly, Secure, SameSite=Lax）に保持します。
 - **Google 連携**: 
+    - `GoogleAuthService` が Google API との対話を担当します。
     - `refresh_token` は初回ログイン時に取得し、DB（`users`テーブル）に暗号化して保存します。
     - `access_token` は 1 時間有効ですが、高速化のため DB にキャッシュします。
     - `GmailService` は、キャッシュが切れている場合のみ Google OAuth エンドポイントへリフレッシュを要求します。
 
-### 3.2 構造化ロギング
+### 3.3 構造化ロギング
 - API へのリクエスト、エラー、バックグラウンド処理のログはすべて **JSON 形式** で出力されます。
 - `requestId` がすべてログに付帯するため、特定のリクエストに関わる一連の動作を追跡可能です。
 - **出力方法**: `Logger.info(c, "message", { extra: "data" })` を使用してください。

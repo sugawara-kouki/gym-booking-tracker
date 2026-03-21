@@ -47,9 +47,11 @@ export class SyncOrchestrator {
     // 札幌市の施設予約システムからのメールのみを対象とするクエリ
     private readonly GMAIL_QUERY = 'subject:"札幌市公共施設予約情報システム"';
     private readonly repos: Repositories;
+    private readonly gmail: GmailService;
 
-    constructor(private readonly env: Bindings) { 
+    constructor(private readonly env: Bindings, gmailService: GmailService) {
         this.repos = createRepositories(env.gym_booking_db);
+        this.gmail = gmailService;
     }
 
     /**
@@ -103,7 +105,6 @@ export class SyncOrchestrator {
      * すでにDBに存在するメッセージIDに遭遇した時点で、それ以降（過去分）は同期済みと見なし終了する（差分同期）。
      */
     async ingest(maxLimit: number = 2000): Promise<{ count: number }> {
-        const gmail = new GmailService(this.env);
         Logger.info(null, 'Starting ingest process', { query: this.GMAIL_QUERY });
         let ingested = 0;
         let pageToken: string | undefined = undefined;
@@ -112,7 +113,7 @@ export class SyncOrchestrator {
 
         do {
             // ページごとにメッセージ一覧を取得
-            const result = await gmail.listMessages(50, this.GMAIL_QUERY, pageToken);
+            const result = await this.gmail.listMessages(50, this.GMAIL_QUERY, pageToken);
             const messages = result.messages;
             pageToken = result.nextPageToken;
 
@@ -142,7 +143,7 @@ export class SyncOrchestrator {
                 if (toFetch.length > 0) {
                     await Promise.all(toFetch.map(async ({ msg }) => {
                         try {
-                            const detail = await gmail.getMessage(msg.id);
+                            const detail = await this.gmail.getMessage(msg.id);
                             await this.repos.rawEmails.create({
                                 id: detail.id,
                                 thread_id: detail.threadId,
