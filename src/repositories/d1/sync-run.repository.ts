@@ -1,4 +1,4 @@
-import { SyncRunRepository, SyncRunStatus } from '../types';
+import { SyncRunRepository, SyncRunStatus, SyncRunRow } from '../types';
 
 export class D1SyncRunRepository implements SyncRunRepository {
     constructor(private readonly db: D1Database) { }
@@ -8,6 +8,12 @@ export class D1SyncRunRepository implements SyncRunRepository {
             INSERT INTO sync_runs (id, user_id, status, total_count, success_count, error_count)
             VALUES (?, ?, ?, 0, 0, 0)
         `).bind(runId, userId, 'running').run();
+    }
+
+    async findById(userId: string, runId: string): Promise<SyncRunRow | null> {
+        return await this.db.prepare('SELECT * FROM sync_runs WHERE user_id = ? AND id = ?')
+            .bind(userId, runId)
+            .first<SyncRunRow>();
     }
 
     async updateTotalCount(userId: string, runId: string, totalCount: number): Promise<void> {

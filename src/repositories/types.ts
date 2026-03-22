@@ -93,6 +93,7 @@ export interface RawEmailRepository {
 
 export interface SyncRunRepository {
     create(userId: string, runId: string): Promise<void>;
+    findById(userId: string, runId: string): Promise<SyncRunRow | null>;
     updateTotalCount(userId: string, runId: string, totalCount: number): Promise<void>;
     finalize(userId: string, runId: string, status: SyncRunStatus, successCount: number, errorCount: number): Promise<void>;
     deleteAll(userId: string): Promise<void>;

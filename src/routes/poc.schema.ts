@@ -47,6 +47,14 @@ export const FullSyncResultSchema = z.object({
   success: z.boolean()
 })
 
+export const SyncStatusResultSchema = z.object({
+  id: z.string(),
+  status: z.string(),
+  total_count: z.number(),
+  success_count: z.number(),
+  error_count: z.number()
+})
+
 // --- Routes configuration ---
 
 export const emailsRoute = createRoute({
@@ -143,11 +151,37 @@ export const syncRoute = createRoute({
   method: 'get',
   path: '/sync',
   summary: 'Run full sync process',
-  description: 'PoC: 同期処理（SyncOrchestrator）の実行テスト',
+  description: 'PoC: 同期処理（SyncOrchestrator）の実行テスト (非同期バックグラウンド実行)',
+  responses: {
+    202: {
+      content: { 'application/json': { schema: SuccessResponseSchema(FullSyncResultSchema) } },
+      description: 'Sync job started in background'
+    },
+    500: {
+      content: { 'application/json': { schema: ErrorResponseSchema } },
+      description: 'Server error'
+    }
+  }
+})
+
+export const syncStatusRoute = createRoute({
+  method: 'get',
+  path: '/sync/status/{runId}',
+  summary: 'Check sync status',
+  description: 'PoC: バックグラウンド実行中の同期処理ステータスを取得',
+  request: {
+    params: z.object({
+      runId: z.string().openapi({ description: 'The Run ID' }),
+    }),
+  },
   responses: {
     200: {
-      content: { 'application/json': { schema: SuccessResponseSchema(FullSyncResultSchema) } },
-      description: 'Sync completed'
+      content: { 'application/json': { schema: SuccessResponseSchema(SyncStatusResultSchema) } },
+      description: 'Sync status'
+    },
+    404: {
+      content: { 'application/json': { schema: ErrorResponseSchema } },
+      description: 'Run ID not found'
     },
     500: {
       content: { 'application/json': { schema: ErrorResponseSchema } },

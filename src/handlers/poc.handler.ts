@@ -6,7 +6,8 @@ import {
   dbTestRoute,
   ingestRoute,
   parsePendingRoute,
-  syncRoute
+  syncRoute,
+  syncStatusRoute
 } from '../routes/poc.schema'
 
 /**
@@ -105,16 +106,57 @@ export const parsePendingHandler: AppRouteHandler<typeof parsePendingRoute> = as
 }
 
 /**
- * フル同期処理（取り込み＋解析）を一括で実行するハンドラー
+ * フル同期処理（取り込み＋解析）を非同期バックグラウンドで開始するハンドラー
  */
 export const syncHandler: AppRouteHandler<typeof syncRoute> = async (c) => {
   const user = c.get('user')
   const orchestrator = new SyncOrchestrator(c.env, user.id, c.get('gmail'))
-  const result = await orchestrator.sync()
+  
+  const runId = crypto.randomUUID()
+  
+  // waitUntil を利用してレスポンス終了後もバックグラウンドで処理を継続
+  c.executionCtx.waitUntil(
+    orchestrator.sync(runId).catch((err) => {
+      console.error(`Background sync failed for runId: ${runId}`, err)
+    })
+  )
 
   return c.json({
     success: true as const,
-    message: 'Sync completed (Ingest + Process)',
-    data: result
+    message: 'Sync job started in background',
+    data: { runId, success: true }
+  }, 202)
+}
+
+/**
+ * バックグラウンド実行中の同期処理ステータスを取得するハンドラー
+ */
+export const syncStatusHandler: AppRouteHandler<typeof syncStatusRoute> = async (c) => {
+  const user = c.get('user')
+  const repos = c.get('repos')
+  const { runId } = c.req.valid('param')
+
+  const syncRun = await repos.syncRuns.findById(user.id, runId)
+  
+  if (!syncRun) {
+    return c.json({
+      success: false as const,
+      error: {
+        code: 'NOT_FOUND',
+        message: 'Sync run ID not found'
+      }
+    }, 404)
+  }
+
+  return c.json({
+    success: true as const,
+    message: 'Status fetched successfully',
+    data: {
+      id: syncRun.id,
+      status: syncRun.status,
+      total_count: syncRun.total_count,
+      success_count: syncRun.success_count,
+      error_count: syncRun.error_count
+    }
   }, 200)
 }

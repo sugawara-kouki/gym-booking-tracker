@@ -58,8 +58,8 @@ export class SyncOrchestrator {
     /**
      * Gmailと同期してデータベースを更新するメイン処理
      */
-    async sync(): Promise<{ runId: string; success: boolean }> {
-        const runId = crypto.randomUUID();
+    async sync(providedRunId?: string): Promise<{ runId: string; success: boolean }> {
+        const runId = providedRunId || crypto.randomUUID();
 
         // 同期実行の開始を記録
         await this.initSyncRun(runId);
