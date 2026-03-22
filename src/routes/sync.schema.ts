@@ -1,36 +1,8 @@
 import { createRoute, z } from '@hono/zod-openapi'
+import { SuccessResponseSchema } from '../utils/response'
 import { ErrorResponseSchema } from '../utils/error'
 
 // --- Schemas ---
-
-export const SuccessResponseSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>
-  z.object({
-    success: z.literal(true),
-    message: z.string().optional(),
-    data: dataSchema.optional()
-  })
-
-export const GmailMessageSchema = z.object({
-  id: z.string(),
-  threadId: z.string(),
-})
-
-export const EmailListResponseSchema = z.object({
-  messages: z.array(GmailMessageSchema),
-  nextPageToken: z.string().optional()
-})
-
-export const BookingSchema = z.object({
-  id: z.string(),
-  facility_name: z.string(),
-  event_date: z.string(),
-  event_end_date: z.string().nullable(),
-  registration_number: z.string().nullable(),
-  purpose: z.string().nullable(),
-  status: z.string(),
-  raw_mail_id: z.string(),
-  created_at: z.string().optional(),
-})
 
 export const IngestResultSchema = z.object({
   count: z.number()
@@ -57,33 +29,11 @@ export const SyncStatusResultSchema = z.object({
 
 // --- Routes configuration ---
 
-export const emailsRoute = createRoute({
-  method: 'get',
-  path: '/emails',
-  summary: 'Fetch recent emails',
-  description: 'PoC: Gmailからメール一覧を取得して返すテストエンドポイント',
-  responses: {
-    200: {
-      content: { 'application/json': { schema: SuccessResponseSchema(EmailListResponseSchema) } },
-      description: 'List of emails'
-    },
-    401: {
-      content: { 'application/json': { schema: ErrorResponseSchema } },
-      description: 'Unauthorized'
-    },
-    500: {
-      content: { 'application/json': { schema: ErrorResponseSchema } },
-      description: 'Server error'
-    }
-  },
-  security: [{ cookieAuth: [] }]
-})
-
-export const dbClearRoute = createRoute({
-  method: 'get',
-  path: '/db-clear',
-  summary: 'Clear database',
-  description: 'PoC: データベースの全データをクリア',
+export const resetDataRoute = createRoute({
+  method: 'delete',
+  path: '/data',
+  summary: 'Reset user data',
+  description: 'ユーザーの全データをクリア（同期ログや予約データ等）',
   responses: {
     200: {
       content: { 'application/json': { schema: SuccessResponseSchema(z.object({})) } },
@@ -96,28 +46,11 @@ export const dbClearRoute = createRoute({
   }
 })
 
-export const dbTestRoute = createRoute({
-  method: 'get',
-  path: '/db-test',
-  summary: 'Test database connection',
-  description: 'PoC: D1 データベースへの接続テスト',
-  responses: {
-    200: {
-      content: { 'application/json': { schema: SuccessResponseSchema(z.array(BookingSchema)) } },
-      description: 'Connection successful'
-    },
-    500: {
-      content: { 'application/json': { schema: ErrorResponseSchema } },
-      description: 'Server error'
-    }
-  }
-})
-
 export const ingestRoute = createRoute({
-  method: 'get',
+  method: 'post',
   path: '/ingest',
-  summary: 'Run ingest process',
-  description: 'PoC: Gmailからの取り込み（Ingest）のみを実行',
+  summary: 'Run ingest process (Debug)',
+  description: '【デバッグ】Gmailからの取り込み（Ingest）のみを実行',
   responses: {
     200: {
       content: { 'application/json': { schema: SuccessResponseSchema(IngestResultSchema) } },
@@ -131,10 +64,10 @@ export const ingestRoute = createRoute({
 })
 
 export const parsePendingRoute = createRoute({
-  method: 'get',
+  method: 'post',
   path: '/parse-pending',
-  summary: 'Process pending emails',
-  description: 'PoC: DB内の未処理メールの解析（Parse Pending）のみを実行',
+  summary: 'Process pending emails (Debug)',
+  description: '【デバッグ】DB内の未処理メールの解析（Parse Pending）のみを実行',
   responses: {
     200: {
       content: { 'application/json': { schema: SuccessResponseSchema(ProcessPendingResultSchema) } },
@@ -148,10 +81,10 @@ export const parsePendingRoute = createRoute({
 })
 
 export const syncRoute = createRoute({
-  method: 'get',
-  path: '/sync',
+  method: 'post',
+  path: '/',
   summary: 'Run full sync process',
-  description: 'PoC: 同期処理（SyncOrchestrator）の実行テスト (非同期バックグラウンド実行)',
+  description: '同期処理（取り込んだ最新メールから予約を解析）の開始 (非同期実行)',
   responses: {
     202: {
       content: { 'application/json': { schema: SuccessResponseSchema(FullSyncResultSchema) } },
@@ -166,9 +99,9 @@ export const syncRoute = createRoute({
 
 export const syncStatusRoute = createRoute({
   method: 'get',
-  path: '/sync/status/{runId}',
+  path: '/{runId}/status',
   summary: 'Check sync status',
-  description: 'PoC: バックグラウンド実行中の同期処理ステータスを取得',
+  description: 'バックグラウンド実行中の同期処理ステータスを取得',
   request: {
     params: z.object({
       runId: z.string().openapi({ description: 'The Run ID' }),

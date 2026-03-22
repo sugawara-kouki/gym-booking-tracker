@@ -1,6 +1,7 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
 import { swaggerUI } from '@hono/swagger-ui'
-import { poc } from './routes/poc'
+import { sync } from './routes/sync'
+import { bookings } from './routes/bookings'
 import { auth } from './routes/auth'
 import { cors } from 'hono/cors'
 import { requestId } from 'hono/request-id'
@@ -39,7 +40,8 @@ app.get('/', (c) => {
 })
 
 // ルートの登録
-app.route('/poc', poc)
+app.route('/sync', sync)
+app.route('/bookings', bookings)
 app.route('/auth', auth)
 
 // グローバルエラーハンドリング
