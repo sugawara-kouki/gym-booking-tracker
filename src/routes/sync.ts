@@ -16,17 +16,15 @@ import {
 } from '../handlers/sync.handler'
 import { injectGmail } from '../middleware/gmail'
 
-export const sync = new OpenAPIHono<{ Bindings: Bindings, Variables: Variables }>()
+const app = new OpenAPIHono<{ Bindings: Bindings, Variables: Variables }>()
 
-// Attach Gmail middleware for routes that need it
-sync.use('/ingest', injectGmail)
-sync.use('/parse-pending', injectGmail)
-sync.use('/', injectGmail)
+app.use('/ingest', injectGmail)
+app.use('/parse-pending', injectGmail)
+app.use('/', injectGmail)
 
-sync.openapi(syncRoute, syncHandler)
-sync.openapi(syncStatusRoute, syncStatusHandler)
-sync.openapi(resetDataRoute, resetDataHandler)
-
-// Debug routes
-sync.openapi(ingestRoute, ingestHandler)
-sync.openapi(parsePendingRoute, parsePendingHandler)
+export const sync = app
+  .openapi(syncRoute, syncHandler)
+  .openapi(syncStatusRoute, syncStatusHandler)
+  .openapi(resetDataRoute, resetDataHandler)
+  .openapi(ingestRoute, ingestHandler)
+  .openapi(parsePendingRoute, parsePendingHandler)

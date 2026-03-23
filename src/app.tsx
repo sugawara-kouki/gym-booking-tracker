@@ -1,8 +1,5 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
 import { swaggerUI } from '@hono/swagger-ui'
-import { sync } from './routes/sync'
-import { bookings } from './routes/bookings'
-import { auth } from './routes/auth'
 import { cors } from 'hono/cors'
 import { requestId } from 'hono/request-id'
 import { injectRepos } from './middleware/db'
@@ -12,6 +9,7 @@ import type { Bindings, Variables } from './types'
 import { renderer } from './renderer'
 import { Login } from './pages/Login'
 import { Hono } from 'hono'
+import { apiApp } from './api'
 
 const app = new OpenAPIHono<{ Bindings: Bindings, Variables: Variables }>()
 
@@ -38,11 +36,7 @@ app.use('*', cors({
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 }))
 
-// --- API サブルーター ---
-const apiApp = new Hono<{ Bindings: Bindings, Variables: Variables }>()
-  .route('/sync', sync)
-  .route('/bookings', bookings)
-  .route('/auth', auth)
+
 
 // --- UI サブルーター ---
 const uiApp = new Hono<{ Bindings: Bindings, Variables: Variables }>()
@@ -77,6 +71,5 @@ app.doc('/doc', {
 
 app.get('/swagger', swaggerUI({ url: '/doc' }))
 
-// Hono RPC 用の型エクスポート (API部分のみ)
-export type AppType = typeof apiApp
+
 export default app

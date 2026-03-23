@@ -1,4 +1,10 @@
+import { hc } from 'hono/client'
+import type { AppType } from '../api/index'
+
 export const Login = () => {
+  const client = hc<AppType>('/api')
+  const authPath = client.auth.google.$url().pathname
+
   return (
     <article style={{ maxWidth: '400px', margin: '100px auto' }}>
       <header>
@@ -9,7 +15,7 @@ export const Login = () => {
           Gym Booking Tracker を利用するには、Googleアカウントでログインしてください。
         </p>
         <a
-          href="/auth/google"
+          href={authPath}
           role="button"
           class="contrast"
           style={{ width: '100%', display: 'block', textAlign: 'center' }}

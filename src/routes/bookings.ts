@@ -4,9 +4,10 @@ import type { Bindings, Variables } from '../types'
 import { getBookingsRoute } from './bookings.schema'
 import { getBookingsHandler } from '../handlers/bookings.handler'
 
-export const bookings = new OpenAPIHono<{ Bindings: Bindings, Variables: Variables }>()
+const app = new OpenAPIHono<{ Bindings: Bindings, Variables: Variables }>()
 
-bookings.use('*', checkJwt)
-bookings.use('*', injectUser)
+app.use('*', checkJwt)
+app.use('*', injectUser)
 
-bookings.openapi(getBookingsRoute, getBookingsHandler)
+export const bookings = app
+  .openapi(getBookingsRoute, getBookingsHandler)
