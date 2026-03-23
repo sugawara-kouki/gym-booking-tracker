@@ -9,8 +9,11 @@ import { injectRepos } from './middleware/db'
 import { errorHandler } from './handlers/error.handler'
 import { Logger } from './utils/logger'
 import type { Bindings, Variables } from './types'
+import { renderer } from './renderer'
+import { Login } from './pages/Login'
+import { Hono } from 'hono'
 
-export const app = new OpenAPIHono<{ Bindings: Bindings, Variables: Variables }>()
+const app = new OpenAPIHono<{ Bindings: Bindings, Variables: Variables }>()
 
 // グローバルミドルウェアの設定
 app.use('*', requestId())
@@ -35,14 +38,23 @@ app.use('*', cors({
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 }))
 
-app.get('/', (c) => {
-  return c.text('Gym Booking Tracker API')
-})
+// --- API サブルーター ---
+const apiApp = new Hono<{ Bindings: Bindings, Variables: Variables }>()
+  .route('/sync', sync)
+  .route('/bookings', bookings)
+  .route('/auth', auth)
 
-// ルートの登録
-app.route('/sync', sync)
-app.route('/bookings', bookings)
-app.route('/auth', auth)
+// --- UI サブルーター ---
+const uiApp = new Hono<{ Bindings: Bindings, Variables: Variables }>()
+  .use('*', renderer)
+  .get('/', (c) => c.text('Gym Booking Tracker'))
+  .get('/login', (c) => {
+    return c.render(<Login />)
+  })
+
+// メインアプリへのマウント
+app.route('/api', apiApp)
+app.route('/', uiApp)
 
 // グローバルエラーハンドリング
 app.onError(errorHandler)
@@ -64,3 +76,7 @@ app.doc('/doc', {
 })
 
 app.get('/swagger', swaggerUI({ url: '/doc' }))
+
+// Hono RPC 用の型エクスポート (API部分のみ)
+export type AppType = typeof apiApp
+export default app
