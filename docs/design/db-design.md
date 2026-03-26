@@ -11,12 +11,29 @@
 
 ## 2. テーブル定義
 
-### 2.1 `bookings` テーブル
+### 2.1 `users` テーブル
+ユーザー（所有者・実行者）の認証情報と基本データを管理する。
+
+| カラム名 | 型 | 制約 | 説明 |
+| :--- | :--- | :--- | :--- |
+| `id` | TEXT | PRIMARY KEY | システム内一意識別子 (UUID) |
+| `provider` | TEXT | NOT NULL | 認証プロバイダー (例: google) |
+| `provider_user_id` | TEXT | NOT NULL | プロバイダー側での一意な ID |
+| `email` | TEXT | NOT NULL | メールアドレス |
+| `name` | TEXT | - | 表示名 |
+| `refresh_token_encrypted` | TEXT | - | 暗号化されたリフレッシュトークン |
+| `access_token_encrypted` | TEXT | - | 暗号化されたアクセストークン |
+| `access_token_expires_at` | INTEGER | - | アクセストークンの有効期限 |
+| `created_at` | INTEGER | DEFAULT (unixepoch()) | 登録日時 (Unix Epoch) |
+| `updated_at` | INTEGER | DEFAULT (unixepoch()) | 最終更新日時 (Unix Epoch) |
+
+### 2.2 `bookings` テーブル
 個別の施設予約・当選情報を管理する。
 
 | カラム名 | 型 | 制約 | 説明 |
 | :--- | :--- | :--- | :--- |
 | `id` | TEXT | PRIMARY KEY | システム内一意識別子 (UUID) |
+| `user_id` | TEXT | NOT NULL | 所有者のユーザーID |
 | `facility_name` | TEXT | NOT NULL | 施設名 (例: 幌東小学校 体育館) |
 | `event_date` | TEXT | NOT NULL | 利用開始日時 (ISO8601形式: YYYY-MM-DD HH:mm) |
 | `event_end_date` | TEXT | - | 利用終了日時 (ISO8601形式: YYYY-MM-DD HH:mm) |
@@ -24,28 +41,45 @@
 | `purpose` | TEXT | - | 利用目的 (例: バドミントン) |
 | `court_info` | TEXT | - | コート番号、部屋名、種目などの詳細 |
 | `status` | TEXT | NOT NULL | ステータス (applied: 申込, won: 当選, confirmed: 確定, cancelled: 取消) |
-| `raw_mail_id` | TEXT | UNIQUE, NOT NULL | 重複排除用の Gmail メッセージ ID |
+| `raw_mail_id` | TEXT | NOT NULL | 重複排除用の Gmail メッセージ ID |
 | `created_at` | INTEGER | DEFAULT (unixepoch()) | 登録日時 (Unix Epoch) |
 | `updated_at` | INTEGER | DEFAULT (unixepoch()) | 最終更新日時 (Unix Epoch) |
 
-### 2.2 `sync_runs` テーブル
+
+### 2.3 `sync_runs` テーブル
 Cron 実行ごとのサマリーを管理する。
 
 | カラム名 | 型 | 制約 | 説明 |
 | :--- | :--- | :--- | :--- |
 | `id` | TEXT | PRIMARY KEY | 一意識別子 (UUID) |
+| `user_id` | TEXT | NOT NULL | 実行者のユーザーID |
 | `status` | TEXT | NOT NULL | 全体結果 (success, partial_success, failure) |
 | `total_count` | INTEGER | DEFAULT 0 | 取得したメールの総数 |
 | `success_count` | INTEGER | DEFAULT 0 | 正常に完了した数 |
 | `error_count` | INTEGER | DEFAULT 0 | エラーが発生した数 |
 | `executed_at` | INTEGER | DEFAULT (unixepoch()) | 実行日時 (Unix Epoch) |
 
-### 2.3 `sync_logs` テーブル
+### 2.4 `raw_emails` テーブル
+取得したメールの生データ（件名、スニペット等）を一時的、あるいは履歴として保存する。
+
+| カラム名 | 型 | 制約 | 説明 |
+| :--- | :--- | :--- | :--- |
+| `id` | TEXT | PRIMARY KEY | Gmail の メッセージ ID |
+| `user_id` | TEXT | NOT NULL | 所有者のユーザーID |
+| `thread_id` | TEXT | NOT NULL | Gmail の スレッド ID |
+| `subject` | TEXT | NOT NULL | メールの件名 |
+| `snippet` | TEXT | NOT NULL | メールのスニペット（プレビュー） |
+| `body` | TEXT | - | メールの本文（パース用） |
+| `fetched_at` | INTEGER | NOT NULL | 取得日時 (Unix Epoch) |
+| `parse_status` | TEXT | NOT NULL | 解析状態 (pending, completed, failed, skipped 等) |
+
+### 2.5 `sync_logs` テーブル
 個別メールごとの処理結果を詳細に記録する。
 
 | カラム名 | 型 | 制約 | 説明 |
 | :--- | :--- | :--- | :--- |
 | `id` | TEXT | PRIMARY KEY | 一意識別子 (UUID) |
+| `user_id` | TEXT | NOT NULL | 所有者のユーザーID |
 | `sync_run_id` | TEXT | REFERENCES sync_runs(id) | 親となる実行ID |
 | `raw_mail_id` | TEXT | NOT NULL | 対象の Gmail メッセージ ID |
 | `status` | TEXT | NOT NULL | 個別結果 (success, parse_error, db_error) |

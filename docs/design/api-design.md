@@ -31,16 +31,38 @@
 
 ## 2. エンドポイント定義
 
-### 2.1 メールの自動解析結果登録
-メール解析用 Worker（または外部サービス）からの解析済みデータを受け取る。
+### 2.1 同期処理の開始 (Full Sync)
+Cron やユーザー操作によってトリガーされ、Gmailからのメール取得と解析を行う。
 
-- **Endpoint**: `POST /webhook/mail`
-- **概要**: 解析済みの予約・当選情報を登録または更新する。
-- **リクエスト**:
-  - `facility_name`: 施設名 (string)
-  - `event_date`: 日時 (ISO8601 string)
-  - `status`: ステータス (enum: "applied", "won", "confirmed", "cancelled")
-  - `raw_mail_id`: メールを一意に特定するID (string) - 冪等性のために使用
+- **Endpoint**: `POST /sync/`
+- **概要**: バックグラウンドで Gmail から最新メールを取得（Ingest）し、データベースの未処理メールを解析（Parse）して予約情報に反映する一連の処理を非同期で開始する。
+- **レスポンス**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "runId": "uuid-string",
+      "success": true
+    }
+  }
+  ```
+
+### 2.1.1 同期ステータス確認
+- **Endpoint**: `GET /sync/:runId/status`
+- **概要**: バックグラウンド実行中または完了した同期処理ステータスを取得する。
+- **レスポンス**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": "uuid-string",
+      "status": "success",
+      "total_count": 10,
+      "success_count": 10,
+      "error_count": 0
+    }
+  }
+  ```
 
 ### 2.2 予約情報一覧取得
 - **Endpoint**: `GET /bookings`
@@ -62,18 +84,10 @@
 - **リクエスト**:
   - `status`: 新しいステータス (enum)
 
-### 2.5 [Development] メール取得テスト (PoC)
-- **Endpoint**: `GET /poc/emails`
-- **概要**: 設定された認証情報を使用して、最新のメールリストを取得できるか確認する。
-- **レスポンス**:
-  ```json
-  {
-    "success": true,
-    "data": {
-      "messages": [ { "id": "...", "threadId": "..." } ]
-    }
-  }
-  ```
+### 2.5 [Debug] デバッグ・運用系エンドポイント
+- **`POST /sync/ingest`**: Gmailから生メールを取り込む（Ingest）工程のみを実行し、`raw_emails` に保存する。
+- **`POST /sync/parse-pending`**: DB内の未処理メール（`raw_emails`）を解析し、`bookings` に変換する工程のみを実行する。
+- **`DELETE /sync/data`**: 開発・検証用にユーザーの全データ（同期ログ、予約データ等）をクリアする。
 
 ---
 

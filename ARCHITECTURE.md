@@ -12,16 +12,17 @@ src/
 ├── index.ts            # Cloudflare Workers のフェッチハンドラー
 ├── types.ts            # 共通の型定義（Bindings, Variables, AppRouteHandler）
 ├── routes/             # 【定義】APIのエンドポイントとバリデーション（OpenAPI）
-│   ├── auth.ts         # Router: auth.schema と auth.handler を結びつける
-│   ├── auth.schema.ts  # Definition: Zodスキーマと Route メタデータ
-│   ├── poc.ts          # Router: poc.schema と poc.handler を結びつける
-│   └── poc.schema.ts   # Definition: Zodスキーマと Route メタデータ
+│   ├── auth.ts / .schema.ts     # 認証関連のルート定義
+│   ├── bookings.ts / .schema.ts # 予約データ取得関連のルート定義
+│   └── sync.ts / .schema.ts     # メール同期・バッチ処理関連のルート定義
 ├── handlers/           # 【実装】Hono Handler の実体 (Contextを受け取る層)
-│   ├── auth.handler.ts # 認証・OAuth処理の具体的なロジック
-│   ├── error.handler.ts # グローバルエラーハンドリングの実装
-│   └── poc.handler.ts  # PoC機能の具体的なロジック
+│   ├── auth.handler.ts     # 認証・OAuth処理の具体的なロジック
+│   ├── bookings.handler.ts # 予約データ取得の具体的なロジック
+│   ├── error.handler.ts    # グローバルエラーハンドリングの実装
+│   └── sync.handler.ts     # 同期処理（Ingest, Parse）の具体的なロジック
 ├── middleware/         # Hono ミドルウェア
 │   ├── auth.ts         # JWT検証 (checkJwt), ユーザー情報注入 (injectUser)
+│   ├── db.ts           # Repository 層の初期化 (injectDb)
 │   └── gmail.ts        # GmailService の初期化とトークン管理 (injectGmail)
 ├── services/           # ビジネスロジック
 │   ├── gmail.ts        # Gmail API との通信、トークンリフレッシュ・キャッシュ制御
