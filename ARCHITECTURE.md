@@ -8,23 +8,30 @@
 
 ```text
 src/
-├── app.ts              # アプリケーションのエントリポイント、ミドルウェア・エラーハンドリングの定義
-├── index.ts            # Cloudflare Workers のフェッチハンドラー
-├── types.ts            # 共通の型定義（Bindings, Variables, AppRouteHandler）
-├── routes/             # 【定義】APIのエンドポイントとバリデーション（OpenAPI）
+├── api/
+│   └── index.ts        # API サブルーター (RPC 用 AppType エクスポート)
+├── routes/             # 【定義】APIのエンドポイントとバリデーション (OpenAPI)
 │   ├── auth.ts / .schema.ts     # 認証関連のルート定義
 │   ├── bookings.ts / .schema.ts # 予約データ取得関連のルート定義
 │   └── sync.ts / .schema.ts     # メール同期・バッチ処理関連のルート定義
 ├── handlers/           # 【実装】Hono Handler の実体 (Contextを受け取る層)
-│   ├── auth.handler.ts     # 認証・OAuth処理の具体的なロジック
-│   ├── bookings.handler.ts # 予約データ取得の具体的なロジック
-│   ├── error.handler.ts    # グローバルエラーハンドリングの実装
-│   └── sync.handler.ts     # 同期処理（Ingest, Parse）の具体的なロジック
+│   ├── auth.handler.ts # 認証・OAuth処理の具体的なロジック
+│   ├── bookings.handler.ts # 予約データ取得のロジック
+│   ├── error.handler.ts # グローバルエラーハンドリングの実装
+│   └── sync.handler.ts # Gmail 同期実行のロジック
 ├── middleware/         # Hono ミドルウェア
 │   ├── auth.ts         # JWT検証 (checkJwt), ユーザー情報注入 (injectUser)
-│   ├── db.ts           # Repository 層の初期化 (injectDb)
+│   ├── db.ts           # D1 データベース接続の注入 (injectDb)
 │   └── gmail.ts        # GmailService の初期化とトークン管理 (injectGmail)
+├── layouts/            # UI レイアウト (Hono/JSX)
+├── pages/              # UI ページコンポーネント
+├── renderer.tsx        # UI レンダリングミドルウェア
+├── app.tsx             # メインアプリケーション定義 (API/UIの統合)
+├── index.ts            # Cloudflare Workers フェッチハンドラー
+├── types.ts            # 共通の型定義
 ├── services/           # ビジネスロジック
+│   ├── auth.ts         # ユーザー管理・JWT発行
+│   ├── google-auth.ts  # Google OAuth2 トークン操作
 │   ├── gmail.ts        # Gmail API との通信、トークンリフレッシュ・キャッシュ制御
 │   ├── parser.ts       # メール本文のスクレイピング・解析ロジック
 │   └── sync-orchestrator.ts # Gmail取得、解析、DB保存の一連の流れを制御
@@ -35,6 +42,7 @@ src/
 └── utils/              # 共通ユーティリティ
     ├── crypto.ts       # AES-GCM によるトークンの暗号化・復号
     ├── error.ts        # エラーコード定義
+    ├── response.ts     # 共通レスポンス形式の定義
     └── logger.ts       # 構造化ロギングの実装
 ```
 
@@ -72,7 +80,7 @@ src/
 - **出力方法**: `Logger.info(c, "message", { extra: "data" })` を使用してください。
 
 ### 3.3 エラーハンドリング
-- `app.ts` の `app.onError` でエラーを集約管理しています。
+- `app.tsx` の `app.onError` でエラーを集約管理しています。
 - 各ルートやミドルウェアで個別の `try-catch` は極力避け、例外をスローすることでグローバルハンドラーに任せる設計です。
 - ユーザーに返すエラーは `ERROR_CODES` に定義された定数を使用します。
 
@@ -109,5 +117,5 @@ npm test -- --coverage
 ---
 
 ## 5. 注意事項
-- **環境変数**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `JWT_SECRET`, `ENCRYPTION_KEY` が必要です。これらは `wrangler.toml` および本番環境の Secret に設定してください。
+- **環境変数**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `JWT_SECRET`, `ENCRYPTION_KEY` が必要です。これらは `wrangler.jsonc` および本番環境の Secret に設定してください。
 - **暗号化キー**: `ENCRYPTION_KEY` を変更すると、既存の保存済みトークンが復号できなくなるため、保守時には十分注意してください。
