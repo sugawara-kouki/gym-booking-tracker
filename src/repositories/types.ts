@@ -82,14 +82,20 @@ export interface UserRepository {
 
 export interface BookingRepository {
   upsert(userId: string, booking: Omit<BookingRow, 'user_id' | 'updated_at'>): Promise<void>
+  batchUpsert(userId: string, bookings: Omit<BookingRow, 'user_id' | 'updated_at'>[]): Promise<void>
   findAll(userId: string): Promise<BookingRow[]>
-  deleteAll(userId: string): Promise<void> // ユーザー単位での削除安全性を確保
+  deleteAll(userId: string): Promise<void>
 }
 
 export interface RawEmailRepository {
   findById(userId: string, id: string): Promise<RawEmailRow | null>
   create(userId: string, email: Omit<RawEmailRow, 'user_id' | 'fetched_at'>): Promise<void>
+  batchCreate(userId: string, emails: Omit<RawEmailRow, 'user_id' | 'fetched_at'>[]): Promise<void>
   updateParseStatus(userId: string, id: string, status: ParseStatus): Promise<void>
+  batchUpdateParseStatus(
+    userId: string,
+    updates: { id: string; status: ParseStatus }[],
+  ): Promise<void>
   findPending(userId: string): Promise<RawEmailRow[]>
   deleteAll(userId: string): Promise<void>
 }
@@ -111,6 +117,7 @@ export interface SyncRunRepository {
 
 export interface SyncLogRepository {
   create(userId: string, log: Omit<SyncLogRow, 'user_id'>): Promise<void>
+  batchCreate(userId: string, logs: Omit<SyncLogRow, 'user_id'>[]): Promise<void>
   deleteAll(userId: string): Promise<void>
 }
 

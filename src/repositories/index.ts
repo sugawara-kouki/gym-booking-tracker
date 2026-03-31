@@ -1,23 +1,23 @@
-import { D1BookingRepository } from './d1/booking.repository'
-import { D1RawEmailRepository } from './d1/raw-email.repository'
-import { D1SyncLogRepository } from './d1/sync-log.repository'
-import { D1SyncRunRepository } from './d1/sync-run.repository'
-import { D1UserRepository } from './d1/user.repository'
+import { createD1BookingRepository } from './d1/booking.repository'
+import { createD1RawEmailRepository } from './d1/raw-email.repository'
+import { createD1SyncLogRepository } from './d1/sync-log.repository'
+import { createD1SyncRunRepository } from './d1/sync-run.repository'
+import { createD1UserRepository } from './d1/user.repository'
 
 export interface Repositories {
-  bookings: D1BookingRepository
-  rawEmails: D1RawEmailRepository
-  syncLogs: D1SyncLogRepository
-  syncRuns: D1SyncRunRepository
-  users: D1UserRepository
+  bookings: ReturnType<typeof createD1BookingRepository>
+  rawEmails: ReturnType<typeof createD1RawEmailRepository>
+  syncLogs: ReturnType<typeof createD1SyncLogRepository>
+  syncRuns: ReturnType<typeof createD1SyncRunRepository>
+  users: ReturnType<typeof createD1UserRepository>
 }
 
 export function createRepositories(db: D1Database): Repositories {
   return {
-    bookings: new D1BookingRepository(db),
-    rawEmails: new D1RawEmailRepository(db),
-    syncLogs: new D1SyncLogRepository(db),
-    syncRuns: new D1SyncRunRepository(db),
-    users: new D1UserRepository(db),
+    bookings: createD1BookingRepository(db),
+    rawEmails: createD1RawEmailRepository(db),
+    syncLogs: createD1SyncLogRepository(db),
+    syncRuns: createD1SyncRunRepository(db),
+    users: createD1UserRepository(db),
   }
 }

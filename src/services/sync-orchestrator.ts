@@ -1,9 +1,9 @@
 import { createRepositories } from '../repositories'
-import type { RawEmailRow } from '../repositories/types'
+import type { BookingRow, SyncLogRow } from '../repositories/types'
 import type { Bindings } from '../types'
 import { Logger } from '../utils/logger'
 import type { GmailService } from './gmail'
-import { EmailParser, type ParsedBooking } from './parser'
+import { EmailParser } from './parser'
 
 /**
  * メール解析ステータスの定数
@@ -82,72 +82,6 @@ export const createSyncOrchestrator = (
           : SYNC_RUN_STATUS.FAILURE
 
     await repos.syncRuns.finalize(userId, runId, finalStatus, successCount, errorCount)
-  }
-
-  /**
-   * 各メールの処理結果を個別ログ (sync_logs) に記録する
-   */
-  const logEmailResult = async (
-    runId: string,
-    mailId: string,
-    status: string,
-    errorDetail?: string,
-  ) => {
-    await repos.syncLogs.create(userId, {
-      id: crypto.randomUUID(),
-      sync_run_id: runId,
-      raw_mail_id: mailId,
-      status,
-      error_detail: errorDetail || null,
-    })
-  }
-
-  /**
-   * 予約情報を bookings テーブルに保存する。登録番号をキーにして Upsert する。
-   */
-  const saveBooking = async (booking: ParsedBooking, rawMailId: string) => {
-    // 登録番号がない場合は臨時 ID を生成（通常は存在するはず）
-    const id = booking.registration_number || crypto.randomUUID()
-
-    await repos.bookings.upsert(userId, {
-      id,
-      facility_name: booking.facility_name,
-      event_date: booking.event_date,
-      event_end_date: booking.event_end_date || null,
-      registration_number: booking.registration_number || null,
-      purpose: booking.purpose || null,
-      court_info: booking.court_info || null,
-      status: booking.status,
-      raw_mail_id: rawMailId,
-    })
-  }
-
-  /**
-   * 1行の生データを解析・保存し、ステータスを更新する
-   */
-  const parseAndSaveRow = async (runId: string, row: RawEmailRow): Promise<boolean> => {
-    const content = row.body || row.snippet
-
-    try {
-      const parsed = EmailParser.parse(content, row.subject)
-
-      // 解析結果が null の場合は「対象外メール（例：ただの通知メール）」として SKIPPED マーク
-      if (!parsed) {
-        await repos.rawEmails.updateParseStatus(userId, row.id, PARSE_STATUS.SKIPPED)
-        return true
-      }
-
-      // 予約情報の保存とステータスの更新
-      await saveBooking(parsed, row.id)
-      await repos.rawEmails.updateParseStatus(userId, row.id, PARSE_STATUS.SUCCESS)
-      await logEmailResult(runId, row.id, PARSE_STATUS.SUCCESS, `Status: ${parsed.status}`)
-      return true
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      await repos.rawEmails.updateParseStatus(userId, row.id, PARSE_STATUS.FAIL)
-      await logEmailResult(runId, row.id, 'error', `FAIL: ${msg}`)
-      return false
-    }
   }
 
   return {
@@ -239,28 +173,36 @@ export const createSyncOrchestrator = (
           }
 
           if (toFetch.length > 0) {
-            await Promise.all(
+            const fetchedDetails = await Promise.all(
               toFetch.map(async ({ msg }) => {
                 try {
                   const detail = await gmail.getMessage(msg.id)
-                  await repos.rawEmails.create(userId, {
+                  return {
                     id: detail.id,
                     thread_id: detail.threadId,
                     subject: detail.subject,
                     snippet: detail.snippet,
                     body: detail.body || null,
-                    parse_status: PARSE_STATUS.PENDING,
-                  })
-                  ingested++
+                    parse_status: PARSE_STATUS.PENDING as ParseStatus,
+                  }
                 } catch (err) {
-                  Logger.error(null, 'Failed to fetch/save message', {
+                  Logger.error(null, 'Failed to fetch message', {
                     messageId: msg.id,
                     userId,
                     error: err,
                   })
+                  return null
                 }
               }),
             )
+
+            const validDetails = fetchedDetails.filter(
+              (d): d is NonNullable<typeof d> => d !== null,
+            )
+            if (validDetails.length > 0) {
+              await repos.rawEmails.batchCreate(userId, validDetails)
+              ingested += validDetails.length
+            }
           }
 
           totalScanned += batch.length
@@ -294,13 +236,72 @@ export const createSyncOrchestrator = (
         userId,
       })
 
+      if (results.length === 0) {
+        return { successCount: 0, errorCount: 0 }
+      }
+
+      const bookingsToUpsert: Omit<BookingRow, 'user_id' | 'updated_at'>[] = []
+      const rawEmailUpdates: { id: string; status: ParseStatus }[] = []
+      const syncLogsToCreate: Omit<SyncLogRow, 'user_id'>[] = []
       let successCount = 0
       let errorCount = 0
 
       for (const row of results) {
-        const isSuccess = await parseAndSaveRow(runId, row)
-        if (isSuccess) successCount++
-        else errorCount++
+        const content = row.body || row.snippet
+        try {
+          const parsed = EmailParser.parse(content, row.subject)
+
+          if (!parsed) {
+            rawEmailUpdates.push({ id: row.id, status: PARSE_STATUS.SKIPPED })
+            successCount++
+            continue
+          }
+
+          // 予約情報の準備
+          bookingsToUpsert.push({
+            id: parsed.registration_number || crypto.randomUUID(),
+            facility_name: parsed.facility_name,
+            event_date: parsed.event_date,
+            event_end_date: parsed.event_end_date || null,
+            registration_number: parsed.registration_number || null,
+            purpose: parsed.purpose || null,
+            court_info: parsed.court_info || null,
+            status: parsed.status,
+            raw_mail_id: row.id,
+          })
+
+          rawEmailUpdates.push({ id: row.id, status: PARSE_STATUS.SUCCESS })
+          syncLogsToCreate.push({
+            id: crypto.randomUUID(),
+            sync_run_id: runId,
+            raw_mail_id: row.id,
+            status: PARSE_STATUS.SUCCESS,
+            error_detail: `Status: ${parsed.status}`,
+          })
+          successCount++
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err)
+          rawEmailUpdates.push({ id: row.id, status: PARSE_STATUS.FAIL })
+          syncLogsToCreate.push({
+            id: crypto.randomUUID(),
+            sync_run_id: runId,
+            raw_mail_id: row.id,
+            status: 'error',
+            error_detail: `FAIL: ${msg}`,
+          })
+          errorCount++
+        }
+      }
+
+      // バッチ実行
+      if (bookingsToUpsert.length > 0) {
+        await repos.bookings.batchUpsert(userId, bookingsToUpsert)
+      }
+      if (rawEmailUpdates.length > 0) {
+        await repos.rawEmails.batchUpdateParseStatus(userId, rawEmailUpdates)
+      }
+      if (syncLogsToCreate.length > 0) {
+        await repos.syncLogs.batchCreate(userId, syncLogsToCreate)
       }
 
       return { successCount, errorCount }
