@@ -1,5 +1,5 @@
 import { createMiddleware } from 'hono/factory'
-import { GmailService } from '../services/gmail'
+import { createGmailService, type GmailService } from '../services/gmail'
 import type { Bindings } from '../types'
 import { decryptToken } from '../utils/crypto'
 import type { AuthenticatedVariables } from './auth'
@@ -21,7 +21,7 @@ export const injectGmail = createMiddleware<{
 }>(async (c, next) => {
   const user = c.get('user')
 
-  if (!user || !user.refresh_token_encrypted) {
+  if (!user?.refresh_token_encrypted) {
     return c.json({ success: false, error: 'Google account not connected' }, 401)
   }
 
@@ -37,7 +37,7 @@ export const injectGmail = createMiddleware<{
     }
   }
 
-  const gmail = new GmailService(
+  const gmail = createGmailService(
     {
       GOOGLE_CLIENT_ID: c.env.GOOGLE_CLIENT_ID,
       GOOGLE_CLIENT_SECRET: c.env.GOOGLE_CLIENT_SECRET,
@@ -46,7 +46,7 @@ export const injectGmail = createMiddleware<{
     {
       accessToken,
       expiresAt: user.access_token_expires_at,
-      onTokenRefresh: async (newToken, expiresAt) => {
+      onTokenRefresh: async (newToken: string, expiresAt: number) => {
         const { encryptToken } = await import('../utils/crypto')
         const encrypted = await encryptToken(newToken, c.env.ENCRYPTION_KEY)
         const repos = c.get('repos')

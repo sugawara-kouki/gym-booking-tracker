@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { GoogleAuthService } from './google-auth'
+import { createGoogleAuthService, type GoogleAuthService } from './google-auth'
 
 describe('GoogleAuthService', () => {
   const clientId = 'test_client_id'
@@ -8,9 +8,9 @@ describe('GoogleAuthService', () => {
   let service: GoogleAuthService
 
   beforeEach(() => {
-    service = new GoogleAuthService(clientId, clientSecret)
+    service = createGoogleAuthService(clientId, clientSecret)
     // Mock global fetch
-    globalThis.fetch = vi.fn() as any
+    globalThis.fetch = vi.fn() as typeof fetch
   })
 
   afterEach(() => {

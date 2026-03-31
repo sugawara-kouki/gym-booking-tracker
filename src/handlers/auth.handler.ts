@@ -6,8 +6,8 @@ import type {
   logoutRoute,
   successRoute,
 } from '../routes/auth.schema'
-import { AuthService } from '../services/auth'
-import { GoogleAuthService } from '../services/google-auth'
+import { createAuthService } from '../services/auth'
+import { createGoogleAuthService } from '../services/google-auth'
 import type { AppRouteHandler, AuthenticatedRouteHandler } from '../types'
 
 /**
@@ -49,7 +49,7 @@ export const googleAuthHandler: AppRouteHandler<typeof googleAuthRoute> = (c) =>
   const state = crypto.randomUUID()
   setCookie(c, 'oauth_state', state, { httpOnly: true, secure: true, maxAge: 60 * 10 })
 
-  const googleAuth = new GoogleAuthService(c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET)
+  const googleAuth = createGoogleAuthService(c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET)
   const authUrl = googleAuth.getAuthUrl(redirectUri, state)
 
   return c.redirect(authUrl)
@@ -75,8 +75,8 @@ export const googleCallbackHandler: AppRouteHandler<typeof googleCallbackRoute> 
   }
 
   const redirectUri = `${url.protocol}//${url.host}/api/auth/google/callback`
-  const googleAuth = new GoogleAuthService(c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET)
-  const authService = new AuthService(c.get('repos'), c.env.ENCRYPTION_KEY, c.env.JWT_SECRET)
+  const googleAuth = createGoogleAuthService(c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET)
+  const authService = createAuthService(c.get('repos'), c.env.ENCRYPTION_KEY, c.env.JWT_SECRET)
 
   // 認可コードをトークンと交換 (プロバイダー固有の処理)
   const tokens = await googleAuth.exchangeCodeForTokens(code, redirectUri)

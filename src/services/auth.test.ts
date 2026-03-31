@@ -2,13 +2,18 @@ import { verify } from 'hono/jwt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Repositories } from '../repositories'
 import { decryptToken } from '../utils/crypto'
-import { AuthService } from './auth'
+import { type AuthService, createAuthService } from './auth'
 
 describe('AuthService', () => {
   const encryptionKey = 'test_encryption_key_such_secure_wow'
   const jwtSecret = 'test_jwt_secret_very_secret_indeed'
 
-  let mockRepos: any
+  let mockRepos: {
+    users: {
+      findByProviderId: ReturnType<typeof vi.fn>
+      upsert: ReturnType<typeof vi.fn>
+    }
+  }
   let authService: AuthService
 
   beforeEach(() => {
@@ -18,7 +23,7 @@ describe('AuthService', () => {
         upsert: vi.fn(),
       },
     }
-    authService = new AuthService(mockRepos as unknown as Repositories, encryptionKey, jwtSecret)
+    authService = createAuthService(mockRepos as unknown as Repositories, encryptionKey, jwtSecret)
   })
 
   describe('loginOrUpdateUser', () => {
