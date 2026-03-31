@@ -1,8 +1,8 @@
 import { hc } from 'hono/client'
 import type { AppType } from '../api/index'
 
-export const Login = () => {
-  const client = hc<AppType>('/api')
+export const Login = ({ baseUrl }: { baseUrl?: string }) => {
+  const client = hc<AppType>(baseUrl || '/api')
   const authPath = client.auth.google.$url().pathname
 
   return (

@@ -31,7 +31,7 @@ export const loginHandler: AppRouteHandler<typeof loginRoute> = (c) => {
       <div class="card">
         <h2>Gym Booking Tracker</h2>
         <p>予約メールを自動同期するためにログインしてください</p>
-        <a href="/auth/google" class="btn">Googleでログイン</a>
+        <a href="/api/auth/google" class="btn">Googleでログイン</a>
       </div>
     </body>
     </html>
@@ -43,7 +43,7 @@ export const loginHandler: AppRouteHandler<typeof loginRoute> = (c) => {
  */
 export const googleAuthHandler: AppRouteHandler<typeof googleAuthRoute> = (c) => {
   const url = new URL(c.req.url)
-  const redirectUri = `${url.protocol}//${url.host}/auth/google/callback`
+  const redirectUri = `${url.protocol}//${url.host}/api/auth/google/callback`
 
   // CSRF対策用の一時的なステートを生成し Cookie に保存
   const state = crypto.randomUUID()
@@ -74,7 +74,7 @@ export const googleCallbackHandler: AppRouteHandler<typeof googleCallbackRoute> 
     return c.text('不正なリクエストです (State不一致 または Codeなし)', 400)
   }
 
-  const redirectUri = `${url.protocol}//${url.host}/auth/google/callback`
+  const redirectUri = `${url.protocol}//${url.host}/api/auth/google/callback`
   const googleAuth = new GoogleAuthService(c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET)
   const authService = new AuthService(c.get('repos'), c.env.ENCRYPTION_KEY, c.env.JWT_SECRET)
 
@@ -111,7 +111,7 @@ export const googleCallbackHandler: AppRouteHandler<typeof googleCallbackRoute> 
   })
 
   // URLから機密パラメータを取り除くため、成功画面へリダイレクト
-  return c.redirect('/auth/success')
+  return c.redirect('/api/auth/success')
 }
 
 /**
@@ -165,5 +165,5 @@ export const logoutHandler: AppRouteHandler<typeof logoutRoute> = (c) => {
     maxAge: 0,
     expires: new Date(0)
   })
-  return c.redirect('/auth/login')
+  return c.redirect('/login')
 }

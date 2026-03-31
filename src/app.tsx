@@ -43,7 +43,8 @@ const uiApp = new Hono<{ Bindings: Bindings, Variables: Variables }>()
   .use('*', renderer)
   .get('/', (c) => c.text('Gym Booking Tracker'))
   .get('/login', (c) => {
-    return c.render(<Login />)
+    const baseUrl = new URL('/api', c.req.url).toString()
+    return c.render(<Login baseUrl={baseUrl} />)
   })
 
 // メインアプリへのマウント

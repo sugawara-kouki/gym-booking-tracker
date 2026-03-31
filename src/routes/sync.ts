@@ -15,9 +15,12 @@ import {
   parsePendingHandler
 } from '../handlers/sync.handler'
 import { injectGmail } from '../middleware/gmail'
+import { checkJwt, injectUser } from '../middleware/auth'
 
 const app = new OpenAPIHono<{ Bindings: Bindings, Variables: Variables }>()
 
+app.use('*', checkJwt)
+app.use('*', injectUser)
 app.use('/ingest', injectGmail)
 app.use('/parse-pending', injectGmail)
 app.use('/', injectGmail)
