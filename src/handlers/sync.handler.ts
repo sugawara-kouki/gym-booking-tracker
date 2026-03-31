@@ -1,5 +1,5 @@
 import { SyncOrchestrator, SYNC_RUN_STATUS } from '../services/sync-orchestrator'
-import type { AppRouteHandler } from '../types'
+import type { AuthenticatedRouteHandler } from '../types'
 import {
   resetDataRoute,
   ingestRoute,
@@ -8,7 +8,7 @@ import {
   syncStatusRoute
 } from '../routes/sync.schema'
 
-export const resetDataHandler: AppRouteHandler<typeof resetDataRoute> = async (c) => {
+export const resetDataHandler: AuthenticatedRouteHandler<typeof resetDataRoute> = async (c) => {
   const repos = c.get('repos')
   const user = c.get('user')
 
@@ -24,7 +24,7 @@ export const resetDataHandler: AppRouteHandler<typeof resetDataRoute> = async (c
   }, 200)
 }
 
-export const ingestHandler: AppRouteHandler<typeof ingestRoute> = async (c) => {
+export const ingestHandler: AuthenticatedRouteHandler<typeof ingestRoute> = async (c) => {
   const user = c.get('user')
   const orchestrator = new SyncOrchestrator(c.env, user.id, c.get('gmail'))
   const result = await orchestrator.ingest(500)
@@ -36,7 +36,7 @@ export const ingestHandler: AppRouteHandler<typeof ingestRoute> = async (c) => {
   }, 200)
 }
 
-export const parsePendingHandler: AppRouteHandler<typeof parsePendingRoute> = async (c) => {
+export const parsePendingHandler: AuthenticatedRouteHandler<typeof parsePendingRoute> = async (c) => {
   const user = c.get('user')
   const orchestrator = new SyncOrchestrator(c.env, user.id, c.get('gmail'))
   const repos = c.get('repos')
@@ -55,7 +55,7 @@ export const parsePendingHandler: AppRouteHandler<typeof parsePendingRoute> = as
   }, 200)
 }
 
-export const syncHandler: AppRouteHandler<typeof syncRoute> = async (c) => {
+export const syncHandler: AuthenticatedRouteHandler<typeof syncRoute> = async (c) => {
   const user = c.get('user')
   const orchestrator = new SyncOrchestrator(c.env, user.id, c.get('gmail'))
   
@@ -74,7 +74,7 @@ export const syncHandler: AppRouteHandler<typeof syncRoute> = async (c) => {
   }, 202)
 }
 
-export const syncStatusHandler: AppRouteHandler<typeof syncStatusRoute> = async (c) => {
+export const syncStatusHandler: AuthenticatedRouteHandler<typeof syncStatusRoute> = async (c) => {
   const user = c.get('user')
   const repos = c.get('repos')
   const { runId } = c.req.valid('param')

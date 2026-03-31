@@ -14,13 +14,17 @@ import {
   ingestHandler,
   parsePendingHandler
 } from '../handlers/sync.handler'
+import { authMiddleware, type AuthenticatedVariables } from '../middleware/auth'
 import { injectGmail } from '../middleware/gmail'
-import { checkJwt, injectUser } from '../middleware/auth'
 
-const app = new OpenAPIHono<{ Bindings: Bindings, Variables: Variables }>()
+/**
+ * 認証済みユーザー向けのルーター定義。
+ * AuthenticatedVariables を指定することで、配下のハンドラーで user が必須型に昇格します。
+ * 詳細は DOCS_AUTH_ARCHITECTURE.md を参照。
+ */
+const app = new OpenAPIHono<{ Bindings: Bindings, Variables: AuthenticatedVariables }>()
 
-app.use('*', checkJwt)
-app.use('*', injectUser)
+app.use('*', authMiddleware)
 app.use('/ingest', injectGmail)
 app.use('/parse-pending', injectGmail)
 app.use('/', injectGmail)

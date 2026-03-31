@@ -1,13 +1,10 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
-import { injectUser, checkJwt } from '../middleware/auth'
+import { injectUser, checkJwt, type AuthenticatedVariables } from '../middleware/auth'
 import type { Bindings, Variables } from '../types'
 import * as schemas from './auth.schema'
 import * as handlers from '../handlers/auth.handler'
 
 const app = new OpenAPIHono<{ Bindings: Bindings, Variables: Variables }>()
-
-app.use('/success', checkJwt)
-app.use('/success', injectUser)
 
 // --- Routing ---
 
@@ -15,5 +12,12 @@ export const auth = app
   .openapi(schemas.loginRoute, handlers.loginHandler)
   .openapi(schemas.googleAuthRoute, handlers.googleAuthHandler)
   .openapi(schemas.googleCallbackRoute, handlers.googleCallbackHandler)
-  .openapi(schemas.successRoute, handlers.successHandler)
   .openapi(schemas.logoutRoute, handlers.logoutHandler)
+
+// 認証が必要なルートのみ、型昇格したサブルーターに切り出す
+const protectedAuth = new OpenAPIHono<{ Bindings: Bindings, Variables: AuthenticatedVariables }>()
+protectedAuth.use('*', checkJwt)
+protectedAuth.use('*', injectUser)
+protectedAuth.openapi(schemas.successRoute, handlers.successHandler)
+
+auth.route('/', protectedAuth)

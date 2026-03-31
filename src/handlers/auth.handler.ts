@@ -1,7 +1,7 @@
 import { getCookie, setCookie } from 'hono/cookie'
 import { GoogleAuthService } from '../services/google-auth'
 import { AuthService } from '../services/auth'
-import type { AppRouteHandler } from '../types'
+import type { AppRouteHandler, AuthenticatedRouteHandler } from '../types'
 import {
   loginRoute,
   googleAuthRoute,
@@ -117,7 +117,7 @@ export const googleCallbackHandler: AppRouteHandler<typeof googleCallbackRoute> 
 /**
  * 認証成功後のダッシュボード画面（HTML）を表示するハンドラー
  */
-export const successHandler: AppRouteHandler<typeof successRoute> = (c) => {
+export const successHandler: AuthenticatedRouteHandler<typeof successRoute> = (c) => {
   const user = c.get('user')
   return c.html(`
     <!DOCTYPE html>

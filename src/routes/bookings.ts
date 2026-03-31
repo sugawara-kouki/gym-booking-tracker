@@ -4,10 +4,11 @@ import type { Bindings, Variables } from '../types'
 import { getBookingsRoute } from './bookings.schema'
 import { getBookingsHandler } from '../handlers/bookings.handler'
 
-const app = new OpenAPIHono<{ Bindings: Bindings, Variables: Variables }>()
+import { authMiddleware, type AuthenticatedVariables } from '../middleware/auth'
 
-app.use('*', checkJwt)
-app.use('*', injectUser)
+const app = new OpenAPIHono<{ Bindings: Bindings, Variables: AuthenticatedVariables }>()
+
+app.use('*', authMiddleware)
 
 export const bookings = app
   .openapi(getBookingsRoute, getBookingsHandler)
