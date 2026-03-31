@@ -106,7 +106,20 @@ export class SyncOrchestrator {
      * すでにDBに存在するメッセージIDに遭遇した時点で、それ以降（過去分）は同期済みと見なし終了する（差分同期）。
      */
     async ingest(maxLimit: number = 2000): Promise<{ count: number }> {
-        Logger.info(null, 'Starting ingest process', { query: this.GMAIL_QUERY, userId: this.userId });
+        // 最新の成功した同期日時を取得し、クエリに追加する（効率化）
+        const lastSuccess = await this.repos.syncRuns.findLastSuccess(this.userId);
+        let query = this.GMAIL_QUERY;
+
+        if (lastSuccess?.executed_at) {
+            // 余裕を持たせて1日前から検索する
+            const afterDate = new Date((lastSuccess.executed_at - 86400) * 1000);
+            const yyyy = afterDate.getFullYear();
+            const mm = String(afterDate.getMonth() + 1).padStart(2, '0');
+            const dd = String(afterDate.getDate()).padStart(2, '0');
+            query += ` after:${yyyy}/${mm}/${dd}`;
+        }
+
+        Logger.info(null, 'Starting ingest process', { query, userId: this.userId });
         let ingested = 0;
         let pageToken: string | undefined = undefined;
         let totalScanned = 0;
@@ -114,7 +127,7 @@ export class SyncOrchestrator {
 
         do {
             // ページごとにメッセージ一覧を取得
-            const result = await this.gmail.listMessages(50, this.GMAIL_QUERY, pageToken);
+            const result = await this.gmail.listMessages(50, query, pageToken);
             const messages = result.messages;
             pageToken = result.nextPageToken;
 
@@ -135,9 +148,11 @@ export class SyncOrchestrator {
                 // 未取得分のみ抽出
                 const toFetch = checkResults.filter(r => !r.existing);
 
-                // 差分同期：既存のメッセージが見つかった場合、それより過去は取り込み済みと判断してループを抜ける
-                if (checkResults.some(r => r.existing)) {
-                    Logger.info(null, 'Found already ingested message. Stopping scan.', { userId: this.userId });
+                // 差分同期の停止判断：
+                // 1. 日付フィルタ（lastSuccess）がない場合は、既存のメッセージが見つかった時点で過去分は取り込み済みと判断して停止する
+                // 2. 日付フィルタがある場合は、意図的なオーバーラップがあるため停止せず、単に既存分をスキップする
+                if (!lastSuccess && checkResults.some(r => r.existing)) {
+                    Logger.info(null, 'Found already ingested message (Full sync). Stopping scan.', { userId: this.userId });
                     stopSync = true;
                 }
 

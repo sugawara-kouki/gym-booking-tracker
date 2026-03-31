@@ -16,6 +16,14 @@ export class D1SyncRunRepository implements SyncRunRepository {
             .first<SyncRunRow>();
     }
 
+    async findLastSuccess(userId: string): Promise<SyncRunRow | null> {
+        return await this.db.prepare(`
+            SELECT * FROM sync_runs 
+            WHERE user_id = ? AND status = ? 
+            ORDER BY executed_at DESC LIMIT 1
+        `).bind(userId, 'success').first<SyncRunRow>();
+    }
+
     async updateTotalCount(userId: string, runId: string, totalCount: number): Promise<void> {
         await this.db.prepare('UPDATE sync_runs SET total_count = ? WHERE user_id = ? AND id = ?')
             .bind(totalCount, userId, runId).run();
