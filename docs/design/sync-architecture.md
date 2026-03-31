@@ -5,16 +5,19 @@ Gmail からのメール同期処理を「生のデータの取り込み（Inges
 ## 1. デザイン原則
 
 - **Fault Tolerance (対障害性)**: 解析エラーが発生しても生データ (`raw_emails`) が DB に残るため、ロジック修正後の再試行が容易。
-- **Data Integrity (整合性)**: 500 件を超える大量のメールもページネーションを用いて漏れなく取得。
+- **Data Integrity (整合性)**: 2000 件規模の大量メールもページネーションを用いて漏れなく取得。
 - **Automation (自動化)**: Cloudflare Workers の Scheduled イベント (Cron) による定期実行に対応。
 
-## 2. データ構造 (D1)
+## 2. 性能最適化 (Performance)
 
-### `raw_emails` テーブル
-取得したメールをパース前の状態で一時保存します。
-- `id`: Gmail Message ID (PK)
-- `body`: デコード済みの本文全文
-- `parse_status`: 解析状態 (`pending`, `completed`, `fail`, `skipped`)
+大量のメールを効率的に処理するため、以下の最適化を行っています。
+
+#### 2.1 D1 Batching
+Cloudflare Workers と D1 間の通信オーバーヘッドを最小化するため、以下の操作で D1 Batch API を使用しています。
+- **Gmail Ingest**: 取得した複数のメッセージを一括保存（`batchCreate`）。
+- **Booking Parse**: 解析した複数の予約情報、解析ステータス更新、実行ログを一括反映（`batchUpsert`, `batchUpdateParseStatus`, `batchCreate`）。
+
+これにより、同期処理時の HTTP 往復回数が劇的に削減されています。
 
 ## 3. 同期コンポーネント (Factory Functions)
 
@@ -23,9 +26,10 @@ Gmail からのメール同期処理を「生のデータの取り込み（Inges
 - 添付ファイルや特殊なエンコーディングのデコード処理を担当。
 
 ### Sync Orchestrator (`createSyncOrchestrator`)
-- **`ingest()`**: Gmail から新規メールをフェッチし、`raw_emails` に `pending` 状態で保存。
-- **`processPending()`**: `pending` 状態のメールを時系列順に読み込み、`EmailParser` を用いて解析。結果を `bookings` に UPSERT し、ステータスを更新。
-- **`sync()`**: インジェストとパースを統合して実行するメインエントリーポイント。
+- **`ingest()`**: Gmail から新規メールをフェッチし、`raw_emails` に `pending` 状態で保存（バッチ処理）。
+- **`processPending()`**: `pending` 状態のメールを解析し、`bookings` に UPSERT。結果とログを一括反映。
+
+---
 
 ## 4. 実行サイクル
 

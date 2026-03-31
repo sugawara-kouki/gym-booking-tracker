@@ -22,7 +22,7 @@ graph TD
             end
             
             subgraph Data ["💾 Data Access"]
-                R[Repositories]
+                R[Repositories (Factory Functions)]
                 D[(Cloudflare D1)]
             end
         end
@@ -47,13 +47,13 @@ graph TD
 本プロジェクトでは、コードの品質と保守性を維持するために以下のパターンを採用しています。
 
 ### 3.1 Factory Function パターン
-各ドメインロジック（Gmail連携、認証、同期管理）は Factory 関数によって生成されます。
-- `this` を使用しないため、`bind` 問題が発生せず、関数型プログラミングの恩恵を受けられます。
+サービス層だけでなくリポジトリ層も Factory 関数化し、`this` の排除とカプセル化を徹底しています。
 - 依存関係（Repositories, Env 等）をクロージャの引数として注入（DI）することで、モックを使用したユニットテストが容易になります。
 
-### 3.2 Repository パターン
+### 3.2 Repository パターン & D1 Batching
 データベースへの直接的なアクセス（SQLクエリ）を Repository レイヤーに集約しています。
-- ビジネスロジックが特定のデータベーススキーマや SQL 実装に依存しないようにします。
+- **Factory 関数化**: リポジトリも Factory 関数形式を採用し、アーキテクチャの一貫性を向上。
+- **D1 Batch API**: `batchCreate` や `batchUpsert` を実装し、Cloudflare Workers と D1 間の通信回数を削減してパフォーマンスを最適化しています。
 
 ### 3.3 Type Promotion (Middleware)
 Hono のミドルウェアを利用して、認証済みユーザー情報や初期化済みのサービスインスタンスを `Context` にセットし、ハンドラー側で「型が保証された状態」で利用できるようにしています。
