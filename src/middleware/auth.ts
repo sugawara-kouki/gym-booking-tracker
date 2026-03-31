@@ -1,6 +1,28 @@
 import { createMiddleware } from 'hono/factory'
 import { jwt } from 'hono/jwt'
+import { HTTPException } from 'hono/http-exception'
+import type { Context } from 'hono'
 import type { Bindings, Variables } from '../types'
+import type { UserRow } from '../repositories/types'
+
+/**
+ * 認証済みであることが保証された Variables の型。
+ * グローバルな Variables.user (Optional) を必須型に上書き（昇格）させます。
+ * 詳細は DOCS_AUTH_ARCHITECTURE.md を参照。
+ */
+export type AuthenticatedVariables = Variables & {
+  /**
+   * 認証済みユーザー情報。デフォルトではオプショナルです。
+   * 認証必須ルートでは AuthenticatedVariables を使用して「必須型」に昇格させます。
+   * 詳細は DOCS_AUTH_ARCHITECTURE.md を参照。
+   */
+  user: UserRow
+}
+
+export type AuthenticatedContext<T extends string = string> = Context<{
+  Bindings: Bindings,
+  Variables: AuthenticatedVariables
+}, T>
 
 /**
  * JWTのペイロードをもとに、DBからユーザー情報を取得して Context にセットするミドルウェア
@@ -34,4 +56,13 @@ export const checkJwt = createMiddleware<{ Bindings: Bindings, Variables: Variab
     alg: 'HS256'
   })
   return jwtMiddleware(c, next)
+})
+
+/**
+ * JWT検証とユーザー取得をまとめた統合認証ミドルウェア
+ */
+export const authMiddleware = createMiddleware<{ Bindings: Bindings, Variables: Variables }>(async (c, next) => {
+  await checkJwt(c, async () => {
+    await injectUser(c, next)
+  })
 })
