@@ -2,45 +2,41 @@
 
 本ドキュメントでは、Gym Booking Tracker におけるバックエンドの主要ロジック、特に定期的なメール収集とデータベースへの反映プロセスの詳細について定義する。
 
-## 1. 全体ワークフロー (Cron / Scheduled Task)
+## 1. 同期ワークフロー (2-Stage Architecture)
 
-システムは一定間隔（例: 1時間おき）で以下のフローを実行し、最新の予約状況を D1 に反映する。
+同期処理は、外部 API との通信（フェッチ）と、アプリケーション内のデータ整合性（パース・保存）の責務を分離するため、以下の 2 段階のパイプラインで構成されています。
 
 ```mermaid
 sequenceDiagram
-    participant C as Cron Trigger (Wrangler)
+    autonumber
+    participant C as SyncOrchestrator
     participant G as Gmail API
-    participant P as Email Parser (Hono)
     participant D as Cloudflare D1
+    participant P as EmailParser (Utility)
     
-    C->>D: 実行開始を記録 (sync_runs)
-    
-    rect rgb(240, 248, 255)
-    Note over C, D: 1. Ingest フェーズ (fetch)
-    C->>G: メールの差分一覧を取得 (list)
-    G-->>C: メッセージID一覧を返却
-    
-    loop 新規メッセージ (並列処理)
-        C->>G: メールの詳細（本文等）を取得 (get)
-        G-->>C: 本文・ヘッダ等
-        C->>D: raw_emails に保存 (status: pending)
-    end
+    Note over C, D: Stage 1: Ingest (Raw Data Acquisition)
+    C->>G: listMessages (差分一覧)
+    G-->>C: Message IDs
+    loop for each Message
+        C->>G: getMessage (詳細取得)
+        G-->>C: Body / Headers
+        C->>D: raw_emails へ保存 (status: pending)
     end
     
-    rect rgb(255, 248, 240)
-    Note over C, D: 2. Parse フェーズ (process)
-    C->>D: 未処理 (pending) の raw_emails を取得
-    loop 古い順に処理
-        C->>P: 本文をパース
-        P-->>C: 解析結果 (Success/Skipped/Error)
-        C->>D: bookings に解析結果を保存 (UPSERT)
-        C->>D: raw_emails のステータスを更新
+    Note over C, D: Stage 2: Process (Parsing & Finalization)
+    C->>D: select pending raw_emails
+    loop for each RawEmail
+        C->>P: parse(body)
+        P-->>C: Parsed Data (JSON)
+        C->>D: bookings へ UPSERT (等価性チェック込)
+        C->>D: raw_emails を completed/fail に更新
         C->>D: sync_logs を記録
     end
-    end
-    
-    C->>D: 実行終了・統計結果を更新 (sync_runs)
 ```
+
+この分離により、Gmail API の制限（Rate Limit）やネットワークエラー、またはパース不具合が発生しても、生のメールデータを失うことなく再試行が可能になっています。
+
+---
 
 ---
 
@@ -65,14 +61,16 @@ sequenceDiagram
 
 ---
 
-## 3. 実装のモジュール化
+## 3. 実装のモジュール化 (Factory Function パターン)
 
-コードの保守性を高めるため、以下の役割分担で実装を行う。
+コードの保守性とテスト容易性を最高レベルに保つため、以下の役割分担で **Factory Function** 形式の実装を行っています。各サービスはインターフェースをエクスポートし、生成関数を介してインスタンス（オブジェクト）を取得します。
 
-1.  **Collector Service**: Gmail API との通信を担当。
-2.  **Parser Service**: 文字列からオブジェクトへの変換を担当（純粋関数）。
-3.  **Repository Layer**: D1 への SQL 実行（INSERT/UPDATE）を担当。
-4.  **Sync Orchestrator**: 上記を組み合わせたメインの同期フローを担当（Cronから呼ばれる）。
+1.  **Gmail Service (`createGmailService`)**: Gmail API との通信、トークンのリフレッシュ、メールデータの取得を担当。
+2.  **Parser Service (`EmailParser`)**: 文字列からオブジェクトへの変換を担当（副作用のない純粋なロジック）。
+3.  **Auth Service (`createAuthService`)**: ユーザーのログイン、プロファイル管理、JWTセッション発行を担当。
+4.  **Google Auth Service (`createGoogleAuthService`)**: Google OAuth2 認可フロー（Code交換等）を担当。
+5.  **Repository Layer (`createRepositories`)**: D1 への SQL 実行（INSERT/UPDATE）を抽象化して担当。
+6.  **Sync Orchestrator (`createSyncOrchestrator`)**: 上記を組み合わせたメインの同期フロー（Ingest -> Parse）を担当。
 
 ---
 
