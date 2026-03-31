@@ -7,7 +7,11 @@
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "check": "biome check .",
+    "check:fix": "biome check --write ."
   },
   "dependencies": {
     "@hono/swagger-ui": "^0.6.1",
@@ -16,6 +20,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.10",
     "@cloudflare/workers-types": "^4.20260307.1",
     "@vitest/coverage-v8": "^4.1.0",
     "typescript": "^5.9.3",
