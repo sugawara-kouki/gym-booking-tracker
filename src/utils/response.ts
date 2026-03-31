@@ -4,5 +4,5 @@ export const SuccessResponseSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>
   z.object({
     success: z.literal(true),
     message: z.string().optional(),
-    data: dataSchema.optional()
+    data: dataSchema.optional(),
   })

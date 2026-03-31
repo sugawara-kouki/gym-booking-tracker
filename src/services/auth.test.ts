@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { AuthService } from './auth'
-import { Repositories } from '../repositories'
 import { verify } from 'hono/jwt'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Repositories } from '../repositories'
 import { decryptToken } from '../utils/crypto'
+import { AuthService } from './auth'
 
 describe('AuthService', () => {
   const encryptionKey = 'test_encryption_key_such_secure_wow'
@@ -15,8 +15,8 @@ describe('AuthService', () => {
     mockRepos = {
       users: {
         findByProviderId: vi.fn(),
-        upsert: vi.fn()
-      }
+        upsert: vi.fn(),
+      },
     }
     authService = new AuthService(mockRepos as unknown as Repositories, encryptionKey, jwtSecret)
   })
@@ -30,13 +30,13 @@ describe('AuthService', () => {
         provider: 'google',
         id: 'google-sub-123',
         email: 'test@example.com',
-        name: 'Test Setup User'
+        name: 'Test Setup User',
       }
 
       const tokens = {
         accessToken: 'access-token-456',
         refreshToken: 'refresh-token-789',
-        expiresIn: 3600
+        expiresIn: 3600,
       }
 
       const result = await authService.loginOrUpdateUser(profile, tokens)
@@ -62,7 +62,10 @@ describe('AuthService', () => {
       const decryptedAccess = await decryptToken(result.access_token_encrypted, encryptionKey)
       expect(decryptedAccess).toBe('access-token-456')
 
-      const decryptedRefresh = await decryptToken(result.refresh_token_encrypted as string, encryptionKey)
+      const decryptedRefresh = await decryptToken(
+        result.refresh_token_encrypted as string,
+        encryptionKey,
+      )
       expect(decryptedRefresh).toBe('refresh-token-789')
     })
 
@@ -71,20 +74,20 @@ describe('AuthService', () => {
       mockRepos.users.findByProviderId.mockResolvedValue({
         id: 'existing-internal-uuid-000',
         refresh_token_encrypted: 'old_encrypted_refresh_token',
-        access_token_expires_at: 1000000
+        access_token_expires_at: 1000000,
       })
 
       const profile = {
         provider: 'google',
         id: 'google-sub-123',
         email: 'test@example.com',
-        name: 'Test Profile'
+        name: 'Test Profile',
       }
 
       const tokens = {
         accessToken: 'new-access-token-999',
         // No refreshToken provided this time!
-        expiresIn: 3600
+        expiresIn: 3600,
       }
 
       const result = await authService.loginOrUpdateUser(profile, tokens)
@@ -105,7 +108,12 @@ describe('AuthService', () => {
 
     it('should handle missing tokens.expiresIn and missing refreshToken for new user', async () => {
       mockRepos.users.findByProviderId.mockResolvedValue(null)
-      const profile = { provider: 'apple', id: 'apple-sub-1', email: 'test@apple.com', name: 'Apple User' }
+      const profile = {
+        provider: 'apple',
+        id: 'apple-sub-1',
+        email: 'test@apple.com',
+        name: 'Apple User',
+      }
       const tokens = { accessToken: 'access-111' } // no refreshToken, no expiresIn
 
       const result = await authService.loginOrUpdateUser(profile, tokens)
@@ -119,10 +127,15 @@ describe('AuthService', () => {
       mockRepos.users.findByProviderId.mockResolvedValue({
         id: 'existing-id-2',
         refresh_token_encrypted: null,
-        access_token_expires_at: 1234567890
+        access_token_expires_at: 1234567890,
       })
-      const profile = { provider: 'apple', id: 'apple-sub-1', email: 'test@apple.com', name: 'Apple User' }
-      const tokens = { accessToken: 'access-222' } 
+      const profile = {
+        provider: 'apple',
+        id: 'apple-sub-1',
+        email: 'test@apple.com',
+        name: 'Apple User',
+      }
+      const tokens = { accessToken: 'access-222' }
 
       const result = await authService.loginOrUpdateUser(profile, tokens)
 
@@ -134,7 +147,7 @@ describe('AuthService', () => {
     it('should generate a valid JWT payload containing the user ID as subject', async () => {
       const user = {
         id: 'user-uuid-xyz',
-        email: 'jwt@example.com'
+        email: 'jwt@example.com',
       }
 
       const token = await authService.createSessionToken(user)
@@ -143,7 +156,7 @@ describe('AuthService', () => {
 
       // Verify the generated token using the same secret
       const payload = await verify(token, jwtSecret, 'HS256')
-      
+
       expect(payload.sub).toBe('user-uuid-xyz')
       expect(payload.email).toBe('jwt@example.com')
       expect(payload.exp).toBeDefined()

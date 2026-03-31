@@ -1,17 +1,17 @@
-import { OpenAPIHono } from '@hono/zod-openapi'
 import { swaggerUI } from '@hono/swagger-ui'
+import { OpenAPIHono } from '@hono/zod-openapi'
+import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { requestId } from 'hono/request-id'
-import { injectRepos } from './middleware/db'
-import { errorHandler } from './handlers/error.handler'
-import { Logger } from './utils/logger'
-import type { Bindings, Variables } from './types'
-import { renderer } from './renderer'
-import { Login } from './pages/Login'
-import { Hono } from 'hono'
 import { apiApp } from './api'
+import { errorHandler } from './handlers/error.handler'
+import { injectRepos } from './middleware/db'
+import { Login } from './pages/Login'
+import { renderer } from './renderer'
+import type { Bindings, Variables } from './types'
+import { Logger } from './utils/logger'
 
-const app = new OpenAPIHono<{ Bindings: Bindings, Variables: Variables }>()
+const app = new OpenAPIHono<{ Bindings: Bindings; Variables: Variables }>()
 
 // グローバルミドルウェアの設定
 app.use('*', requestId())
@@ -27,19 +27,20 @@ app.use('*', async (c, next) => {
     method: c.req.method,
     path: c.req.path,
     status: c.res.status,
-    latency: `${end - start}ms`
+    latency: `${end - start}ms`,
   })
 })
 
-app.use('*', cors({
-  origin: '*',
-  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-}))
-
-
+app.use(
+  '*',
+  cors({
+    origin: '*',
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  }),
+)
 
 // --- UI サブルーター ---
-const uiApp = new Hono<{ Bindings: Bindings, Variables: Variables }>()
+const uiApp = new Hono<{ Bindings: Bindings; Variables: Variables }>()
   .use('*', renderer)
   .get('/', (c) => c.text('Gym Booking Tracker'))
   .get('/login', (c) => {
@@ -58,7 +59,7 @@ app.onError(errorHandler)
 app.openAPIRegistry.registerComponent('securitySchemes', 'cookieAuth', {
   type: 'apiKey',
   in: 'cookie',
-  name: 'auth_token'
+  name: 'auth_token',
 })
 
 app.doc('/doc', {
@@ -66,11 +67,11 @@ app.doc('/doc', {
   info: {
     version: '1.0.0',
     title: 'Gym Booking Tracker API',
-    description: 'ジムの予約メールを自動解析し、Googleカレンダー等と連携するためのバックエンドAPIです。',
+    description:
+      'ジムの予約メールを自動解析し、Googleカレンダー等と連携するためのバックエンドAPIです。',
   },
 })
 
 app.get('/swagger', swaggerUI({ url: '/doc' }))
-
 
 export default app

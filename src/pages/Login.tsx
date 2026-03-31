@@ -16,7 +16,6 @@ export const Login = ({ baseUrl }: { baseUrl?: string }) => {
         </p>
         <a
           href={authPath}
-          role="button"
           class="contrast"
           style={{ width: '100%', display: 'block', textAlign: 'center' }}
         >

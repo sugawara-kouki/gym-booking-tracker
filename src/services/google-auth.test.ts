@@ -1,10 +1,10 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GoogleAuthService } from './google-auth'
 
 describe('GoogleAuthService', () => {
   const clientId = 'test_client_id'
   const clientSecret = 'test_client_secret'
-  
+
   let service: GoogleAuthService
 
   beforeEach(() => {
@@ -23,18 +23,20 @@ describe('GoogleAuthService', () => {
       const state = 'random_state_string_123'
 
       const urlString = service.getAuthUrl(redirectUri, state)
-      
+
       // It should be a valid URL
       const url = new URL(urlString)
-      
+
       expect(url.origin).toBe('https://accounts.google.com')
       expect(url.pathname).toBe('/o/oauth2/v2/auth')
-      
+
       // Check search params
       expect(url.searchParams.get('client_id')).toBe(clientId)
       expect(url.searchParams.get('redirect_uri')).toBe(redirectUri)
       expect(url.searchParams.get('response_type')).toBe('code')
-      expect(url.searchParams.get('scope')).toContain('https://www.googleapis.com/auth/gmail.readonly')
+      expect(url.searchParams.get('scope')).toContain(
+        'https://www.googleapis.com/auth/gmail.readonly',
+      )
       expect(url.searchParams.get('access_type')).toBe('offline')
       expect(url.searchParams.get('prompt')).toBe('consent')
       expect(url.searchParams.get('state')).toBe(state)
@@ -49,12 +51,12 @@ describe('GoogleAuthService', () => {
         expires_in: 3600,
         scope: 'openid profile email',
         token_type: 'Bearer',
-        id_token: 'mock_id_token'
+        id_token: 'mock_id_token',
       }
 
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockResponseData
+        json: async () => mockResponseData,
       } as Response)
 
       const code = 'auth_code_xyz'
@@ -64,12 +66,15 @@ describe('GoogleAuthService', () => {
 
       // Verify fetch was called with right args
       expect(globalThis.fetch).toHaveBeenCalledTimes(1)
-      expect(globalThis.fetch).toHaveBeenCalledWith('https://oauth2.googleapis.com/token', expect.objectContaining({
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        }
-      }))
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        'https://oauth2.googleapis.com/token',
+        expect.objectContaining({
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        }),
+      )
 
       // Verify body
       const callBody = vi.mocked(fetch).mock.calls[0][1]?.body as URLSearchParams
@@ -88,12 +93,12 @@ describe('GoogleAuthService', () => {
     it('should throw an error on non-OK response', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
-        text: async () => 'invalid_grant'
+        text: async () => 'invalid_grant',
       } as Response)
 
-      await expect(
-        service.exchangeCodeForTokens('bad_code', 'http://localhost')
-      ).rejects.toThrow('Failed to exchange token: invalid_grant')
+      await expect(service.exchangeCodeForTokens('bad_code', 'http://localhost')).rejects.toThrow(
+        'Failed to exchange token: invalid_grant',
+      )
     })
   })
 
@@ -107,22 +112,25 @@ describe('GoogleAuthService', () => {
         given_name: 'Test',
         family_name: 'User',
         picture: 'https://example.com/photo.jpg',
-        locale: 'ja'
+        locale: 'ja',
       }
 
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockResponseData
+        json: async () => mockResponseData,
       } as Response)
 
       const result = await service.fetchUserInfo('valid_access_token_123')
 
       expect(globalThis.fetch).toHaveBeenCalledTimes(1)
-      expect(globalThis.fetch).toHaveBeenCalledWith('https://www.googleapis.com/oauth2/v2/userinfo', expect.objectContaining({
-        headers: {
-           Authorization: 'Bearer valid_access_token_123'
-        }
-      }))
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        'https://www.googleapis.com/oauth2/v2/userinfo',
+        expect.objectContaining({
+          headers: {
+            Authorization: 'Bearer valid_access_token_123',
+          },
+        }),
+      )
 
       expect(result.id).toBe('1234567890')
       expect(result.email).toBe('test@example.com')
@@ -132,12 +140,12 @@ describe('GoogleAuthService', () => {
     it('should throw an error on non-OK response', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
-        text: async () => 'Unauthorized'
+        text: async () => 'Unauthorized',
       } as Response)
 
-      await expect(
-        service.fetchUserInfo('invalid_token')
-      ).rejects.toThrow('Failed to fetch user info: Unauthorized')
+      await expect(service.fetchUserInfo('invalid_token')).rejects.toThrow(
+        'Failed to fetch user info: Unauthorized',
+      )
     })
   })
 })

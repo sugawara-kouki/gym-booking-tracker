@@ -1,9 +1,9 @@
-import { RouteConfig, RouteHandler } from '@hono/zod-openapi'
-import type { UserRow } from './repositories/types'
-import type { GmailService } from './services/gmail'
-import type { Repositories } from './repositories'
+import type { RouteConfig, RouteHandler } from '@hono/zod-openapi'
 import type { AuthenticatedVariables } from './middleware/auth'
 import type { AuthenticatedGmailVariables } from './middleware/gmail'
+import type { Repositories } from './repositories'
+import type { UserRow } from './repositories/types'
+import type { GmailService } from './services/gmail'
 
 export type Bindings = {
   GOOGLE_CLIENT_ID: string
@@ -30,6 +30,15 @@ export type Variables = {
   repos: Repositories
 }
 
-export type AppRouteHandler<T extends RouteConfig> = RouteHandler<T, { Bindings: Bindings, Variables: Variables }>
-export type AuthenticatedRouteHandler<T extends RouteConfig> = RouteHandler<T, { Bindings: Bindings, Variables: AuthenticatedVariables }>
-export type AuthenticatedGmailRouteHandler<T extends RouteConfig> = RouteHandler<T, { Bindings: Bindings, Variables: AuthenticatedGmailVariables }>
+export type AppRouteHandler<T extends RouteConfig> = RouteHandler<
+  T,
+  { Bindings: Bindings; Variables: Variables }
+>
+export type AuthenticatedRouteHandler<T extends RouteConfig> = RouteHandler<
+  T,
+  { Bindings: Bindings; Variables: AuthenticatedVariables }
+>
+export type AuthenticatedGmailRouteHandler<T extends RouteConfig> = RouteHandler<
+  T,
+  { Bindings: Bindings; Variables: AuthenticatedGmailVariables }
+>

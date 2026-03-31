@@ -1,12 +1,12 @@
-import { SyncOrchestrator, SYNC_RUN_STATUS } from '../services/sync-orchestrator'
-import type { AuthenticatedRouteHandler, AuthenticatedGmailRouteHandler } from '../types'
-import {
-  resetDataRoute,
+import type {
   ingestRoute,
   parsePendingRoute,
+  resetDataRoute,
   syncRoute,
-  syncStatusRoute
+  syncStatusRoute,
 } from '../routes/sync.schema'
+import { SYNC_RUN_STATUS, SyncOrchestrator } from '../services/sync-orchestrator'
+import type { AuthenticatedGmailRouteHandler, AuthenticatedRouteHandler } from '../types'
 
 export const resetDataHandler: AuthenticatedRouteHandler<typeof resetDataRoute> = async (c) => {
   const repos = c.get('repos')
@@ -17,11 +17,14 @@ export const resetDataHandler: AuthenticatedRouteHandler<typeof resetDataRoute> 
   await repos.bookings.deleteAll(user.id)
   await repos.rawEmails.deleteAll(user.id)
 
-  return c.json({
-    success: true as const,
-    message: 'Current user data cleared successfully',
-    data: {}
-  }, 200)
+  return c.json(
+    {
+      success: true as const,
+      message: 'Current user data cleared successfully',
+      data: {},
+    },
+    200,
+  )
 }
 
 export const ingestHandler: AuthenticatedGmailRouteHandler<typeof ingestRoute> = async (c) => {
@@ -29,14 +32,19 @@ export const ingestHandler: AuthenticatedGmailRouteHandler<typeof ingestRoute> =
   const orchestrator = new SyncOrchestrator(c.env, user.id, c.get('gmail'))
   const result = await orchestrator.ingest(500)
 
-  return c.json({
-    success: true as const,
-    message: 'Ingest completed',
-    data: result
-  }, 200)
+  return c.json(
+    {
+      success: true as const,
+      message: 'Ingest completed',
+      data: result,
+    },
+    200,
+  )
 }
 
-export const parsePendingHandler: AuthenticatedGmailRouteHandler<typeof parsePendingRoute> = async (c) => {
+export const parsePendingHandler: AuthenticatedGmailRouteHandler<typeof parsePendingRoute> = async (
+  c,
+) => {
   const user = c.get('user')
   const orchestrator = new SyncOrchestrator(c.env, user.id, c.get('gmail'))
   const repos = c.get('repos')
@@ -45,33 +53,40 @@ export const parsePendingHandler: AuthenticatedGmailRouteHandler<typeof parsePen
   await repos.syncRuns.create(user.id, runId)
   const result = await orchestrator.processPending(runId)
 
-  const finalStatus = result.errorCount === 0 ? SYNC_RUN_STATUS.SUCCESS : SYNC_RUN_STATUS.PARTIAL_SUCCESS
+  const finalStatus =
+    result.errorCount === 0 ? SYNC_RUN_STATUS.SUCCESS : SYNC_RUN_STATUS.PARTIAL_SUCCESS
   await repos.syncRuns.finalize(user.id, runId, finalStatus, result.successCount, result.errorCount)
 
-  return c.json({
-    success: true as const,
-    message: 'Processing completed',
-    data: { ...result, runId }
-  }, 200)
+  return c.json(
+    {
+      success: true as const,
+      message: 'Processing completed',
+      data: { ...result, runId },
+    },
+    200,
+  )
 }
 
 export const syncHandler: AuthenticatedGmailRouteHandler<typeof syncRoute> = async (c) => {
   const user = c.get('user')
   const orchestrator = new SyncOrchestrator(c.env, user.id, c.get('gmail'))
-  
+
   const runId = crypto.randomUUID()
-  
+
   c.executionCtx.waitUntil(
     orchestrator.sync(runId).catch((err) => {
       console.error(`Background sync failed for runId: ${runId}`, err)
-    })
+    }),
   )
 
-  return c.json({
-    success: true as const,
-    message: 'Sync job started in background',
-    data: { runId, success: true }
-  }, 202)
+  return c.json(
+    {
+      success: true as const,
+      message: 'Sync job started in background',
+      data: { runId, success: true },
+    },
+    202,
+  )
 }
 
 export const syncStatusHandler: AuthenticatedRouteHandler<typeof syncStatusRoute> = async (c) => {
@@ -80,26 +95,32 @@ export const syncStatusHandler: AuthenticatedRouteHandler<typeof syncStatusRoute
   const { runId } = c.req.valid('param')
 
   const syncRun = await repos.syncRuns.findById(user.id, runId)
-  
+
   if (!syncRun) {
-    return c.json({
-      success: false as const,
-      error: {
-        code: 'NOT_FOUND',
-        message: 'Sync run ID not found'
-      }
-    }, 404)
+    return c.json(
+      {
+        success: false as const,
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Sync run ID not found',
+        },
+      },
+      404,
+    )
   }
 
-  return c.json({
-    success: true as const,
-    message: 'Status fetched successfully',
-    data: {
-      id: syncRun.id,
-      status: syncRun.status,
-      total_count: syncRun.total_count,
-      success_count: syncRun.success_count,
-      error_count: syncRun.error_count
-    }
-  }, 200)
+  return c.json(
+    {
+      success: true as const,
+      message: 'Status fetched successfully',
+      data: {
+        id: syncRun.id,
+        status: syncRun.status,
+        total_count: syncRun.total_count,
+        success_count: syncRun.success_count,
+        error_count: syncRun.error_count,
+      },
+    },
+    200,
+  )
 }

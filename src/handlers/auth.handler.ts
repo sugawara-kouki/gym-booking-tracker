@@ -1,14 +1,14 @@
 import { getCookie, setCookie } from 'hono/cookie'
-import { GoogleAuthService } from '../services/google-auth'
-import { AuthService } from '../services/auth'
-import type { AppRouteHandler, AuthenticatedRouteHandler } from '../types'
-import {
-  loginRoute,
+import type {
   googleAuthRoute,
   googleCallbackRoute,
+  loginRoute,
+  logoutRoute,
   successRoute,
-  logoutRoute
 } from '../routes/auth.schema'
+import { AuthService } from '../services/auth'
+import { GoogleAuthService } from '../services/google-auth'
+import type { AppRouteHandler, AuthenticatedRouteHandler } from '../types'
 
 /**
  * ログイン画面（HTML）を表示するハンドラー
@@ -90,13 +90,13 @@ export const googleCallbackHandler: AppRouteHandler<typeof googleCallbackRoute> 
       provider: 'google',
       id: profile.id,
       email: profile.email,
-      name: profile.name || 'Unknown'
+      name: profile.name || 'Unknown',
     },
     {
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token,
-      expiresIn: tokens.expires_in
-    }
+      expiresIn: tokens.expires_in,
+    },
   )
 
   // アプリケーション独自のセッション管理用 JWT を発行
@@ -107,7 +107,7 @@ export const googleCallbackHandler: AppRouteHandler<typeof googleCallbackRoute> 
     httpOnly: true,
     secure: true,
     sameSite: 'Lax',
-    maxAge: 60 * 60 * 24 * 7
+    maxAge: 60 * 60 * 24 * 7,
   })
 
   // URLから機密パラメータを取り除くため、成功画面へリダイレクト
@@ -157,13 +157,13 @@ export const logoutHandler: AppRouteHandler<typeof logoutRoute> = (c) => {
     secure: true,
     sameSite: 'Lax',
     maxAge: 0,
-    expires: new Date(0)
+    expires: new Date(0),
   })
   setCookie(c, 'oauth_state', '', {
     httpOnly: true,
     secure: true,
     maxAge: 0,
-    expires: new Date(0)
+    expires: new Date(0),
   })
   return c.redirect('/login')
 }

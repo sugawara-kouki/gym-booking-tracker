@@ -1,7 +1,7 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
-import { sync } from '../routes/sync'
-import { bookings } from '../routes/bookings'
 import { auth } from '../routes/auth'
+import { bookings } from '../routes/bookings'
+import { sync } from '../routes/sync'
 
 const routes = new OpenAPIHono()
   .route('/sync', sync)

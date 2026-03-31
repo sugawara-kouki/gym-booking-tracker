@@ -1,6 +1,6 @@
 import { createRoute, z } from '@hono/zod-openapi'
-import { SuccessResponseSchema } from '../utils/response'
 import { ErrorResponseSchema } from '../utils/error'
+import { SuccessResponseSchema } from '../utils/response'
 
 export const BookingSchema = z.object({
   id: z.string(),
@@ -22,11 +22,11 @@ export const getBookingsRoute = createRoute({
   responses: {
     200: {
       content: { 'application/json': { schema: SuccessResponseSchema(z.array(BookingSchema)) } },
-      description: 'Bookings retrieved successfully'
+      description: 'Bookings retrieved successfully',
     },
     500: {
       content: { 'application/json': { schema: ErrorResponseSchema } },
-      description: 'Server error'
-    }
-  }
+      description: 'Server error',
+    },
+  },
 })

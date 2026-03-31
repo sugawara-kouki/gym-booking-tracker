@@ -32,9 +32,9 @@ export const loginRoute = createRoute({
   responses: {
     200: {
       description: 'Login page HTML',
-      content: { 'text/html': { schema: z.string() } }
-    }
-  }
+      content: { 'text/html': { schema: z.string() } },
+    },
+  },
 })
 
 export const googleAuthRoute = createRoute({
@@ -43,8 +43,8 @@ export const googleAuthRoute = createRoute({
   summary: 'Redirect to Google OAuth',
   description: 'Googleの認可画面（OAuth同意画面）へリダイレクトします',
   responses: {
-    302: { description: 'Redirect to Google' }
-  }
+    302: { description: 'Redirect to Google' },
+  },
 })
 
 export const googleCallbackRoute = createRoute({
@@ -54,17 +54,17 @@ export const googleCallbackRoute = createRoute({
   description: 'Googleからの認可コードを受け取り、トークン交換とログイン処理を完了させます',
   responses: {
     302: {
-      description: 'Redirect to success page'
+      description: 'Redirect to success page',
     },
     400: {
       description: 'Invalid request (state mismatch or missing code)',
-      content: { 'text/plain': { schema: z.string() } }
+      content: { 'text/plain': { schema: z.string() } },
     },
     500: {
       description: 'Authentication failed',
-      content: { 'text/html': { schema: z.string() } }
-    }
-  }
+      content: { 'text/html': { schema: z.string() } },
+    },
+  },
 })
 
 export const successRoute = createRoute({
@@ -75,9 +75,9 @@ export const successRoute = createRoute({
   responses: {
     200: {
       description: 'Success page HTML',
-      content: { 'text/html': { schema: z.string() } }
-    }
-  }
+      content: { 'text/html': { schema: z.string() } },
+    },
+  },
 })
 
 export const logoutRoute = createRoute({
@@ -86,6 +86,6 @@ export const logoutRoute = createRoute({
   summary: 'Logout',
   description: '認証Cookieを削除してログアウトします',
   responses: {
-    302: { description: 'Redirect to login page' }
-  }
+    302: { description: 'Redirect to login page' },
+  },
 })

@@ -1,22 +1,22 @@
 import { createRoute, z } from '@hono/zod-openapi'
-import { SuccessResponseSchema } from '../utils/response'
 import { ErrorResponseSchema } from '../utils/error'
+import { SuccessResponseSchema } from '../utils/response'
 
 // --- Schemas ---
 
 export const IngestResultSchema = z.object({
-  count: z.number()
+  count: z.number(),
 })
 
 export const ProcessPendingResultSchema = z.object({
   successCount: z.number(),
   errorCount: z.number(),
-  runId: z.string()
+  runId: z.string(),
 })
 
 export const FullSyncResultSchema = z.object({
   runId: z.string(),
-  success: z.boolean()
+  success: z.boolean(),
 })
 
 export const SyncStatusResultSchema = z.object({
@@ -24,7 +24,7 @@ export const SyncStatusResultSchema = z.object({
   status: z.string(),
   total_count: z.number(),
   success_count: z.number(),
-  error_count: z.number()
+  error_count: z.number(),
 })
 
 // --- Routes configuration ---
@@ -37,13 +37,13 @@ export const resetDataRoute = createRoute({
   responses: {
     200: {
       content: { 'application/json': { schema: SuccessResponseSchema(z.object({})) } },
-      description: 'Data cleared successfully'
+      description: 'Data cleared successfully',
     },
     500: {
       content: { 'application/json': { schema: ErrorResponseSchema } },
-      description: 'Server error'
-    }
-  }
+      description: 'Server error',
+    },
+  },
 })
 
 export const ingestRoute = createRoute({
@@ -54,13 +54,13 @@ export const ingestRoute = createRoute({
   responses: {
     200: {
       content: { 'application/json': { schema: SuccessResponseSchema(IngestResultSchema) } },
-      description: 'Ingest completed'
+      description: 'Ingest completed',
     },
     500: {
       content: { 'application/json': { schema: ErrorResponseSchema } },
-      description: 'Server error'
-    }
-  }
+      description: 'Server error',
+    },
+  },
 })
 
 export const parsePendingRoute = createRoute({
@@ -70,14 +70,16 @@ export const parsePendingRoute = createRoute({
   description: '【デバッグ】DB内の未処理メールの解析（Parse Pending）のみを実行',
   responses: {
     200: {
-      content: { 'application/json': { schema: SuccessResponseSchema(ProcessPendingResultSchema) } },
-      description: 'Processing completed'
+      content: {
+        'application/json': { schema: SuccessResponseSchema(ProcessPendingResultSchema) },
+      },
+      description: 'Processing completed',
     },
     500: {
       content: { 'application/json': { schema: ErrorResponseSchema } },
-      description: 'Server error'
-    }
-  }
+      description: 'Server error',
+    },
+  },
 })
 
 export const syncRoute = createRoute({
@@ -88,13 +90,13 @@ export const syncRoute = createRoute({
   responses: {
     202: {
       content: { 'application/json': { schema: SuccessResponseSchema(FullSyncResultSchema) } },
-      description: 'Sync job started in background'
+      description: 'Sync job started in background',
     },
     500: {
       content: { 'application/json': { schema: ErrorResponseSchema } },
-      description: 'Server error'
-    }
-  }
+      description: 'Server error',
+    },
+  },
 })
 
 export const syncStatusRoute = createRoute({
@@ -110,15 +112,15 @@ export const syncStatusRoute = createRoute({
   responses: {
     200: {
       content: { 'application/json': { schema: SuccessResponseSchema(SyncStatusResultSchema) } },
-      description: 'Sync status'
+      description: 'Sync status',
     },
     404: {
       content: { 'application/json': { schema: ErrorResponseSchema } },
-      description: 'Run ID not found'
+      description: 'Run ID not found',
     },
     500: {
       content: { 'application/json': { schema: ErrorResponseSchema } },
-      description: 'Server error'
-    }
-  }
+      description: 'Server error',
+    },
+  },
 })

@@ -9,8 +9,8 @@ const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v2/userinfo'
 export class GoogleAuthService {
   constructor(
     private readonly clientId: string,
-    private readonly clientSecret: string
-  ) { }
+    private readonly clientSecret: string,
+  ) {}
 
   /**
    * Google の認可画面へリダイレクトするための URL を生成する
@@ -23,7 +23,7 @@ export class GoogleAuthService {
       scope: 'openid profile email https://www.googleapis.com/auth/gmail.readonly',
       access_type: 'offline',
       prompt: 'consent',
-      state: state
+      state: state,
     })
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
   }
@@ -40,8 +40,8 @@ export class GoogleAuthService {
         client_secret: this.clientSecret,
         code,
         redirect_uri: redirectUri,
-        grant_type: 'authorization_code'
-      })
+        grant_type: 'authorization_code',
+      }),
     })
 
     if (!response.ok) {
@@ -58,7 +58,7 @@ export class GoogleAuthService {
    */
   async fetchUserInfo(accessToken: string) {
     const response = await fetch(GOOGLE_USERINFO_URL, {
-      headers: { Authorization: `Bearer ${accessToken}` }
+      headers: { Authorization: `Bearer ${accessToken}` },
     })
 
     if (!response.ok) {

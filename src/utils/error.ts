@@ -5,13 +5,15 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status'
 /**
  * 共通のエラーレスポンススキーマ
  */
-export const ErrorResponseSchema = z.object({
-  success: z.literal(false),
-  error: z.object({
-    code: z.string().openapi({ example: 'INTERNAL_SERVER_ERROR' }),
-    message: z.string().openapi({ example: 'An unexpected error occurred' }),
+export const ErrorResponseSchema = z
+  .object({
+    success: z.literal(false),
+    error: z.object({
+      code: z.string().openapi({ example: 'INTERNAL_SERVER_ERROR' }),
+      message: z.string().openapi({ example: 'An unexpected error occurred' }),
+    }),
   })
-}).openapi('ErrorResponse')
+  .openapi('ErrorResponse')
 
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>
 
@@ -36,17 +38,17 @@ export type ErrorCode = keyof typeof ERROR_CODES
 export const createErrorResponse = (
   status: ContentfulStatusCode,
   code: ErrorCode,
-  message: string
+  message: string,
 ) => {
   const response = new Response(
     JSON.stringify({
       success: false,
-      error: { code, message }
+      error: { code, message },
     }),
     {
       status,
-      headers: { 'Content-Type': 'application/json' }
-    }
+      headers: { 'Content-Type': 'application/json' },
+    },
   )
   return new HTTPException(status, { res: response })
 }
