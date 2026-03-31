@@ -8,52 +8,56 @@ export interface LogPayload {
   time: string
   requestId?: string
   userId?: string
-  [key: string]: any
+  [key: string]: unknown
 }
 
-export class Logger {
-  static info(c: Context | null, message: string, extra: Record<string, any> = {}) {
-    Logger.log(c, 'info', message, extra)
+const log = (
+  c: Context | null,
+  level: LogLevel,
+  message: string,
+  extra: Record<string, unknown>,
+): void => {
+  const payload: LogPayload = {
+    time: new Date().toISOString(),
+    level,
+    message,
+    requestId: c?.get('requestId'),
+    userId: c?.get('user')?.id,
+    ...extra,
   }
 
-  static warn(c: Context | null, message: string, extra: Record<string, any> = {}) {
-    Logger.log(c, 'warn', message, extra)
+  const output = JSON.stringify(payload)
+  if (level === 'error') {
+    console.error(output)
+  } else if (level === 'warn') {
+    console.warn(output)
+  } else {
+    console.log(output)
   }
+}
 
-  static error(c: Context | null, message: string, extra: Record<string, any> = {}) {
-    if (extra.error instanceof Error) {
-      extra.stack = extra.error.stack
-      extra.error = extra.error.message
+/**
+ * ログ出力を担当するユーティリティ
+ */
+export const Logger = {
+  info(c: Context | null, message: string, extra: Record<string, unknown> = {}) {
+    log(c, 'info', message, extra)
+  },
+
+  warn(c: Context | null, message: string, extra: Record<string, unknown> = {}) {
+    log(c, 'warn', message, extra)
+  },
+
+  error(c: Context | null, message: string, extra: Record<string, unknown> = {}) {
+    const logExtra = { ...extra }
+    if (logExtra.error instanceof Error) {
+      logExtra.stack = logExtra.error.stack
+      logExtra.error = logExtra.error.message
     }
-    Logger.log(c, 'error', message, extra)
-  }
+    log(c, 'error', message, logExtra)
+  },
 
-  static debug(c: Context | null, message: string, extra: Record<string, any> = {}) {
-    Logger.log(c, 'debug', message, extra)
-  }
-
-  private static log(
-    c: Context | null,
-    level: LogLevel,
-    message: string,
-    extra: Record<string, any>,
-  ) {
-    const payload: LogPayload = {
-      time: new Date().toISOString(),
-      level,
-      message,
-      requestId: c?.get('requestId'),
-      userId: c?.get('user')?.id,
-      ...extra,
-    }
-
-    const output = JSON.stringify(payload)
-    if (level === 'error') {
-      console.error(output)
-    } else if (level === 'warn') {
-      console.warn(output)
-    } else {
-      console.log(output)
-    }
-  }
+  debug(c: Context | null, message: string, extra: Record<string, unknown> = {}) {
+    log(c, 'debug', message, extra)
+  },
 }

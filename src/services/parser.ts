@@ -30,17 +30,56 @@ export interface ParsedBooking {
   status: BookingStatus
 }
 
-/**
- * 札幌市公共施設予約システムからのメールを解析するクラス
- */
-export class EmailParser {
-  // 抽出用の正規表現を定数化
-  private static readonly FACILITY_REGEX = /【施設室場】(.*)/
-  private static readonly DATE_REGEX =
-    /【利用日時】(\d{4})年(\d{1,2})月(\d{1,2})日\(.\)(\d{1,2}:\d{2})～(\d{1,2}:\d{2})/
-  private static readonly REG_NO_REGEX = /【受付番号】([\d-]+)/
-  private static readonly PURPOSE_REGEX = /【利用目的】(.*)/
+// 抽出用の正規表現を定数化
+const FACILITY_REGEX = /【施設室場】(.*)/
+const DATE_REGEX =
+  /【利用日時】(\d{4})年(\d{1,2})月(\d{1,2})日\(.\)(\d{1,2}:\d{2})～(\d{1,2}:\d{2})/
+const REG_NO_REGEX = /【受付番号】([\d-]+)/
+const PURPOSE_REGEX = /【利用目的】(.*)/
 
+/**
+ * 本文または件名の内容から予約ステータスを判定する
+ */
+const determineStatus = (body: string, subject?: string): BookingStatus => {
+  // 件名に「当選」が含まれる場合は最優先で WON 判定
+  if (subject?.includes('抽選申込当選のお知らせ') || subject?.includes('当選')) {
+    return BOOKING_STATUS.WON
+  }
+
+  if (body.includes('抽選に当選されました')) return BOOKING_STATUS.WON
+  if (body.includes('利用申込の手続きを完了')) return BOOKING_STATUS.CONFIRMED
+  if (body.includes('キャンセル')) return BOOKING_STATUS.CANCELLED
+
+  return BOOKING_STATUS.APPLIED // デフォルトまたは「抽選申込を受付けました」
+}
+
+/**
+ * 正規表現の正規表現の各パーツを ISO8601 風の形式 (YYYY-MM-DD HH:mm) に変換する
+ */
+const formatDateRange = (
+  match: RegExpMatchArray,
+): {
+  eventDate: string
+  eventEndDate: string
+} => {
+  const [_, year, rawMonth, rawDay, rawStart, rawEnd] = match
+
+  // 1桁の月日や時間を 2桁（例: 03-09 09:00）に揃えるパディング
+  const month = rawMonth.padStart(2, '0')
+  const day = rawDay.padStart(2, '0')
+  const startTime = rawStart.padStart(5, '0')
+  const endTime = rawEnd.padStart(5, '0')
+
+  return {
+    eventDate: `${year}-${month}-${day} ${startTime}`,
+    eventEndDate: `${year}-${month}-${day} ${endTime}`,
+  }
+}
+
+/**
+ * 札幌市公共施設予約システムからのメールを解析する
+ */
+export const EmailParser = {
   /**
    * メールのテキスト内容を解析して予約情報を抽出する
    *
@@ -48,10 +87,10 @@ export class EmailParser {
    * @param subject メールの件名（任意）
    * @returns 解析結果。必須項目（施設、日時）が欠けている場合は null
    */
-  static parse(body: string, subject?: string): ParsedBooking | null {
+  parse(body: string, subject?: string): ParsedBooking | null {
     // 1. 各項目の抽出実行
-    const facilityMatch = body.match(EmailParser.FACILITY_REGEX)
-    const dateMatch = body.match(EmailParser.DATE_REGEX)
+    const facilityMatch = body.match(FACILITY_REGEX)
+    const dateMatch = body.match(DATE_REGEX)
 
     // 必須項目（施設名と日時）が取れない場合は、対象外のメールとして扱う
     if (!facilityMatch || !dateMatch) {
@@ -59,14 +98,14 @@ export class EmailParser {
     }
 
     // 2. ステータスの推論
-    const status = EmailParser.determineStatus(body, subject)
+    const status = determineStatus(body, subject)
 
     // 3. 日時情報の整形
-    const { eventDate, eventEndDate } = EmailParser.formatDateRange(dateMatch)
+    const { eventDate, eventEndDate } = formatDateRange(dateMatch)
 
     // 4. その他の情報の抽出
-    const registrationNumber = body.match(EmailParser.REG_NO_REGEX)?.[1].trim()
-    const purpose = body.match(EmailParser.PURPOSE_REGEX)?.[1].trim()
+    const registrationNumber = body.match(REG_NO_REGEX)?.[1].trim()
+    const purpose = body.match(PURPOSE_REGEX)?.[1].trim()
 
     return {
       facility_name: facilityMatch[1].trim(),
@@ -76,42 +115,5 @@ export class EmailParser {
       purpose: purpose,
       status,
     }
-  }
-
-  /**
-   * 本文または件名の内容から予約ステータスを判定する
-   */
-  private static determineStatus(body: string, subject?: string): BookingStatus {
-    // 件名に「当選」が含まれる場合は最優先で WON 判定
-    if (subject?.includes('抽選申込当選のお知らせ') || subject?.includes('当選')) {
-      return BOOKING_STATUS.WON
-    }
-
-    if (body.includes('抽選に当選されました')) return BOOKING_STATUS.WON
-    if (body.includes('利用申込の手続きを完了')) return BOOKING_STATUS.CONFIRMED
-    if (body.includes('キャンセル')) return BOOKING_STATUS.CANCELLED
-
-    return BOOKING_STATUS.APPLIED // デフォルトまたは「抽選申込を受付けました」
-  }
-
-  /**
-   * 正規表現の正規表現の各パーツを ISO8601 風の形式 (YYYY-MM-DD HH:mm) に変換する
-   */
-  private static formatDateRange(match: RegExpMatchArray): {
-    eventDate: string
-    eventEndDate: string
-  } {
-    const [_, year, rawMonth, rawDay, rawStart, rawEnd] = match
-
-    // 1桁の月日や時間を 2桁（例: 03-09 09:00）に揃えるパディング
-    const month = rawMonth.padStart(2, '0')
-    const day = rawDay.padStart(2, '0')
-    const startTime = rawStart.padStart(5, '0')
-    const endTime = rawEnd.padStart(5, '0')
-
-    return {
-      eventDate: `${year}-${month}-${day} ${startTime}`,
-      eventEndDate: `${year}-${month}-${day} ${endTime}`,
-    }
-  }
+  },
 }
