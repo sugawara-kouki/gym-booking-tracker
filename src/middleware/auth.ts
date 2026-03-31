@@ -1,6 +1,5 @@
 import type { Context } from 'hono'
 import { createMiddleware } from 'hono/factory'
-import { HTTPException } from 'hono/http-exception'
 import { jwt } from 'hono/jwt'
 import type { UserRow } from '../repositories/types'
 import type { Bindings, Variables } from '../types'
@@ -34,7 +33,7 @@ export type AuthenticatedContext<T extends string = string> = Context<
 export const injectUser = createMiddleware<{ Bindings: Bindings; Variables: Variables }>(
   async (c, next) => {
     const payload = c.get('jwtPayload')
-    if (!payload || !payload.sub) {
+    if (!payload?.sub) {
       return c.json({ success: false, error: 'Unauthorized: Invalid JWT payload' }, 401)
     }
 
