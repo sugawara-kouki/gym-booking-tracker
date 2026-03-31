@@ -1,99 +1,68 @@
-# gym-booking-tracker 要件定義書
+# Gym Booking Tracker
 
-公共施設（主に体育館）の予約・当選情報を自動的に集約し、一元管理するためのシステム。
+公共施設（主に体育館）の予約・当選メールを自動解析し、一元管理するためのシステムです。
+Cloudflare Workers (Hono) 上で動作し、Gmail API と連携して情報を集約します。
 
 ## 1. プロジェクト概要
 
-### 1.1 背景
-公共施設の予約システムは自治体ごとに独立しており、複数の施設やアカウントを利用する場合、当選確認や予約状況の把握が大きな負担となっている。
+- **目的**: 複数の自治体・施設から届く通知メールを自動で解析、データベース化し、確認漏れを防ぐ。
+- **ターゲット**: 複数の施設やアカウントを使い分けるスポーツ団体・個人。
+- **アーキテクチャ**: サーバーレス、DI (Dependency Injection) を活用したテスト容易性の高い設計。
 
-### 1.2 目的
-各施設から送信される通知メールを自動解析し、情報を一箇所に集約することで、ユーザーの確認負荷を完全に排除する。
+## 2. 技術構成
 
----
+- **Framework**: [Hono](https://hono.dev/) (with Zod OpenAPI)
+- **Runtime**: [Cloudflare Workers](https://workers.cloudflare.com/)
+- **Database**: [Cloudflare D1](https://developers.cloudflare.com/d1/) (SQLite based RDB)
+- **Tooling**: [Biome](https://biomejs.dev/) (Lint/Format/Check)
+- **Testing**: [Vitest](https://vitest.dev/)
+- **Language**: TypeScript
 
-## 2. ターゲット
-- **対象施設**: 公共の体育館（及びそれに類する施設）
-- **対象ユーザー**: 複数の抽選申し込みを並行して行う個人・団体
+## 3. 設計方針
 
----
+本プロジェクトでは、保守性とテスト容易性を高めるため、以下の設計パターンを採用しています。
 
-## 3. 機能要件
+- **Factory Function パターン**: 従来の `class` ベースの実装ではなく、クロージャを利用した Factory 関数を採用し、`this` の排除とカプセル化を強化しています。
+- **Repository パターン**: データベースアクセスを抽象化し、ビジネスロジックから切り離しています。
+- **Type-Safe Routing**: Hono の Zod OpenAPI を利用し、型安全なリクエスト/レスポンスと自動生成される Swagger ドキュメントを実現しています。
 
-### 3.1 メール自動解析
-- 施設から送信される「当選通知」「予約申込完了」「予約確定」等のメールを解析する。
-- 施設名、日時、コート番号（または部屋名）、ステータス（当選・確定等）を抽出する。
+## 4. 開発ガイド
 
-### 3.2 データ一元管理
-- 抽出したデータをデータベースに保存する。
-- アカウントを横断して一括して情報を保持する。
+### 4.1 開発コマンド
 
-### 3.3 ダッシュボード
-- 予約・当選状況を一覧表示する。
-- ステータス（未確定、確定、キャンセル等）の可視化。
-
----
-
-## 4. 非機能要件
-
-### 4.1 セキュリティ・プライバシー
-- **情報の秘匿**: 施設名、地名、個人情報は環境変数または設定ファイルで管理し、リポジトリに含めない。
-- **認証**: 初期段階では簡素な仕組みとし、将来的に必要に応じてGoogleログイン等の認証を導入可能とする。
-
-### 4.2 保守性・拡張性
-- **解析ロジックの分離**: メールのフォーマット変更に柔軟に対応できるよう、パース処理とビジネスロジックを分離する（Modularity）。
-- **疎結合設計**: TypeSafeなインターフェースを定義し、各コンポーネントの依存関係を最小限に抑える。
-
-### 4.3 信頼性・回復性
-- **サーバーレス**: Cloudflare Workersを活用し、常駐サーバーを持たない構成とする。
-- **冪等性**: 同一メールの複数回処理に対しても、データが重複登録されない設計とする。
-
----
-
-## 5. 開発者向けガイド (Hono / Cloudflare Workers)
-
-### 5.1 開発コマンド
 ```bash
-# ローカル開発サーバー起動
+# ローカル開発サーバー起動 (Wrangler)
 npm run dev
 
-# デプロイ
+# 型チェック + Lint + 全体チェックを一括実行
+npm run check:all
+
+# テスト実行
+npm run test
+
+# セキュリティ脆弱性の修正 (package-lock.json 更新)
+npm audit fix
+
+# デプロイ (Cloudflare へ)
 npm run deploy
 
-# 型定義生成 (Worker configuration ベース)
-npm run cf-typegen
+# DB マイグレーション適用
+npx wrangler d1 migrations apply gym-booking-db --local
 ```
 
-### 5.2 開発ルール
-詳細は [.antigravity/rules.md](file:///Users/k-sugawara/work/gym-booking-tracker/.antigravity/rules.md) を参照のこと。
+### 4.2 開発ルール
 
-1. **型定義優先**: 実装前に必ず型（Interface）を定義する。
-2. **テスト重視**: 異常系を含むテストコードを必ず作成する。
-3. **意図の明文化**: コードには「Why（なぜこの実装か）」をコメントで残す。
+- **型（Interface）優先**: 実装前に必ず型を定義し、コンポーネント間の契約を明確にする。
+- **Biome による品質管理**: `npm run check:all` が通る状態を維持する。
+- **テスト駆動**: 重要なビジネスロジック（メールパース等）には必ずテストを付随させる。
 
----
+## 5. ドキュメント一覧
 
-## 6. 技術構成
-
-- **Framework**: Hono
-- **Runtime**: Cloudflare Workers
-- **Language**: TypeScript
-- **Storage**: Cloudflare D1 (RDB)
-- **CI/CD**: GitHub Actions
-
----
-
-## 7. ドキュメント一覧
-
-プロジェクトの理解を深めるためのドキュメント。
-
-### 設計 (Design)
-- [API 設計書](docs/design/api-design.md)
+- [API 設計・仕様書](docs/design/api-design.md)
 - [データベース設計書](docs/design/db-design.md)
-- [システム構成図 (Markdown)](docs/design/architecture.md)
-- [システム構成図 (Visual/HTML)](docs/design/architecture.html)
-
-### ガイド・手順書 (Guide)
+- [システム構成図](docs/design/architecture.md)
 - [Google Cloud (Gmail API) セットアップ手順](docs/guide/google-cloud-setup.md)
-- [データベース (D1) セットアップ手順](docs/guide/database-setup.md)
-- [トラブルシューティング・備忘録](docs/guide/troubleshooting.md)
+- [トラブルシューティング](docs/guide/troubleshooting.md)
+
+---
+© 2026 k-sugawara / Gym Booking Tracker Project
