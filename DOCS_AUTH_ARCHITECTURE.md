@@ -62,3 +62,29 @@ Hono の `factory.createHandlers` は配列を返すため、`zod-openapi` の `
 
 ---
 **Tip**: 新しい認証必須ルートを追加する際は、`AuthenticatedRouteHandler` を使用し、対応するルーターで必ず `authMiddleware` を `app.use` するようにしてください。設定を忘れた場合は、TypeScript がコンパイルエラーとして教えてくれます。
+
+## 5. 応用例: Gmail 連携の型昇格
+認証だけでなく、特定の外部サービス連携（Gmail など）が必要なルートに対しても同様の手法を適用できます。
+
+### A. 型定義の拡張 (`src/middleware/gmail.ts`)
+```typescript
+export type AuthenticatedGmailVariables = AuthenticatedVariables & {
+  gmail: GmailService; // Google 連携済みであることを保証
+}
+```
+
+### B. ルーターでの段階的な昇格 (`src/routes/sync.ts`)
+```typescript
+// 認証のみ必要なルート
+const app = new OpenAPIHono<{ Variables: AuthenticatedVariables }>();
+app.use('*', authMiddleware);
+
+// さらに Gmail も必要なルート専用のサブルーター
+const gmailApp = new OpenAPIHono<{ Variables: AuthenticatedGmailVariables }>();
+gmailApp.use('*', injectGmail);
+
+gmailApp.openapi(syncRoute, syncHandler); // syncHandler は AuthenticatedGmailRouteHandler を使用
+app.route('/', gmailApp);
+```
+
+このように、ルーターをネストさせることで、各ハンドラーが「本当に必要としているリソース」を型レベルで正確に表現できます。

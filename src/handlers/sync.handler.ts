@@ -1,5 +1,5 @@
 import { SyncOrchestrator, SYNC_RUN_STATUS } from '../services/sync-orchestrator'
-import type { AuthenticatedRouteHandler } from '../types'
+import type { AuthenticatedRouteHandler, AuthenticatedGmailRouteHandler } from '../types'
 import {
   resetDataRoute,
   ingestRoute,
@@ -24,7 +24,7 @@ export const resetDataHandler: AuthenticatedRouteHandler<typeof resetDataRoute> 
   }, 200)
 }
 
-export const ingestHandler: AuthenticatedRouteHandler<typeof ingestRoute> = async (c) => {
+export const ingestHandler: AuthenticatedGmailRouteHandler<typeof ingestRoute> = async (c) => {
   const user = c.get('user')
   const orchestrator = new SyncOrchestrator(c.env, user.id, c.get('gmail'))
   const result = await orchestrator.ingest(500)
@@ -36,7 +36,7 @@ export const ingestHandler: AuthenticatedRouteHandler<typeof ingestRoute> = asyn
   }, 200)
 }
 
-export const parsePendingHandler: AuthenticatedRouteHandler<typeof parsePendingRoute> = async (c) => {
+export const parsePendingHandler: AuthenticatedGmailRouteHandler<typeof parsePendingRoute> = async (c) => {
   const user = c.get('user')
   const orchestrator = new SyncOrchestrator(c.env, user.id, c.get('gmail'))
   const repos = c.get('repos')
@@ -55,7 +55,7 @@ export const parsePendingHandler: AuthenticatedRouteHandler<typeof parsePendingR
   }, 200)
 }
 
-export const syncHandler: AuthenticatedRouteHandler<typeof syncRoute> = async (c) => {
+export const syncHandler: AuthenticatedGmailRouteHandler<typeof syncRoute> = async (c) => {
   const user = c.get('user')
   const orchestrator = new SyncOrchestrator(c.env, user.id, c.get('gmail'))
   

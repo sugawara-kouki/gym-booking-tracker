@@ -3,6 +3,7 @@ import type { UserRow } from './repositories/types'
 import type { GmailService } from './services/gmail'
 import type { Repositories } from './repositories'
 import type { AuthenticatedVariables } from './middleware/auth'
+import type { AuthenticatedGmailVariables } from './middleware/gmail'
 
 export type Bindings = {
   GOOGLE_CLIENT_ID: string
@@ -24,10 +25,11 @@ export type Variables = {
    * 詳細は DOCS_AUTH_ARCHITECTURE.md を参照。
    */
   user?: UserRow
-  gmail: GmailService
+  gmail?: GmailService
   requestId: string
   repos: Repositories
 }
 
 export type AppRouteHandler<T extends RouteConfig> = RouteHandler<T, { Bindings: Bindings, Variables: Variables }>
 export type AuthenticatedRouteHandler<T extends RouteConfig> = RouteHandler<T, { Bindings: Bindings, Variables: AuthenticatedVariables }>
+export type AuthenticatedGmailRouteHandler<T extends RouteConfig> = RouteHandler<T, { Bindings: Bindings, Variables: AuthenticatedGmailVariables }>

@@ -1,13 +1,21 @@
 import { createMiddleware } from 'hono/factory'
 import { GmailService } from '../services/gmail'
 import { decryptToken } from '../utils/crypto'
-import type { Bindings, Variables } from '../types'
+import type { Bindings } from '../types'
+import { type AuthenticatedVariables } from './auth'
+
+/**
+ * 認証済みかつ GmailService が準備できていることが保証された Variables の型
+ */
+export type AuthenticatedGmailVariables = AuthenticatedVariables & {
+  gmail: GmailService
+}
 
 /**
  * GmailService を初期化して Context にセットするミドルウェア
  * ※ injectUser の後に実行される必要があります
  */
-export const injectGmail = createMiddleware<{ Bindings: Bindings, Variables: Variables }>(async (c, next) => {
+export const injectGmail = createMiddleware<{ Bindings: Bindings, Variables: AuthenticatedVariables }>(async (c, next) => {
   const user = c.get('user')
 
   if (!user || !user.refresh_token_encrypted) {

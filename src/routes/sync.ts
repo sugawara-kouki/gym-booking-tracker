@@ -1,5 +1,5 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
-import type { Bindings, Variables } from '../types'
+import type { Bindings } from '../types'
 import {
   syncRoute,
   syncStatusRoute,
@@ -15,7 +15,7 @@ import {
   parsePendingHandler
 } from '../handlers/sync.handler'
 import { authMiddleware, type AuthenticatedVariables } from '../middleware/auth'
-import { injectGmail } from '../middleware/gmail'
+import { injectGmail, type AuthenticatedGmailVariables } from '../middleware/gmail'
 
 /**
  * 認証済みユーザー向けのルーター定義。
@@ -25,13 +25,19 @@ import { injectGmail } from '../middleware/gmail'
 const app = new OpenAPIHono<{ Bindings: Bindings, Variables: AuthenticatedVariables }>()
 
 app.use('*', authMiddleware)
-app.use('/ingest', injectGmail)
-app.use('/parse-pending', injectGmail)
-app.use('/', injectGmail)
+
+// Gmail 不要なルート（ベースアプリに直接登録）
+app.openapi(syncStatusRoute, syncStatusHandler)
+app.openapi(resetDataRoute, resetDataHandler)
+
+// Gmail 必要なルート（型昇格したサブルーターに登録）
+const gmailApp = new OpenAPIHono<{ Bindings: Bindings, Variables: AuthenticatedGmailVariables }>()
+gmailApp.use('*', injectGmail)
+
+gmailApp.openapi(syncRoute, syncHandler)
+gmailApp.openapi(ingestRoute, ingestHandler)
+gmailApp.openapi(parsePendingRoute, parsePendingHandler)
+
+app.route('/', gmailApp)
 
 export const sync = app
-  .openapi(syncRoute, syncHandler)
-  .openapi(syncStatusRoute, syncStatusHandler)
-  .openapi(resetDataRoute, resetDataHandler)
-  .openapi(ingestRoute, ingestHandler)
-  .openapi(parsePendingRoute, parsePendingHandler)
