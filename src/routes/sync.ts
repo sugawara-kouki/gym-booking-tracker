@@ -1,4 +1,3 @@
-import { OpenAPIHono } from '@hono/zod-openapi'
 import {
   ingestHandler,
   parsePendingHandler,
@@ -6,9 +5,7 @@ import {
   syncHandler,
   syncStatusHandler,
 } from '../handlers/sync.handler'
-import { type AuthenticatedVariables, authMiddleware } from '../middleware/auth'
-import { type AuthenticatedGmailVariables, injectGmail } from '../middleware/gmail'
-import type { Bindings } from '../types'
+import { createAuthRouter, createGmailRouter } from '../utils/router'
 import {
   ingestRoute,
   parsePendingRoute,
@@ -19,20 +16,17 @@ import {
 
 /**
  * 認証済みユーザー向けのルーター定義。
- * AuthenticatedVariables を指定することで、配下のハンドラーで user が必須型に昇格します。
- * 詳細は DOCS_AUTH_ARCHITECTURE.md を参照。
+ * createAuthRouter を使用することで、自動的に認証ミドルウェアが適用され、型が昇格します。
  */
-const app = new OpenAPIHono<{ Bindings: Bindings; Variables: AuthenticatedVariables }>()
-
-app.use('*', authMiddleware)
+const app = createAuthRouter()
 
 // Gmail 不要なルート（ベースアプリに直接登録）
 app.openapi(syncStatusRoute, syncStatusHandler)
 app.openapi(resetDataRoute, resetDataHandler)
 
 // Gmail 必要なルート（型昇格したサブルーターに登録）
-const gmailApp = new OpenAPIHono<{ Bindings: Bindings; Variables: AuthenticatedGmailVariables }>()
-gmailApp.use('*', injectGmail)
+// createGmailRouter を使用することで、Gmail 連携に必要なミドルウェアが自動適用されます。
+const gmailApp = createGmailRouter()
 
 gmailApp.openapi(syncRoute, syncHandler)
 gmailApp.openapi(ingestRoute, ingestHandler)

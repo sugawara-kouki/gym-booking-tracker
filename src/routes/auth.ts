@@ -1,10 +1,8 @@
-import { OpenAPIHono } from '@hono/zod-openapi'
 import * as handlers from '../handlers/auth.handler'
-import { type AuthenticatedVariables, checkJwt, injectUser } from '../middleware/auth'
-import type { Bindings, Variables } from '../types'
+import { createAuthRouter, createRouter } from '../utils/router'
 import * as schemas from './auth.schema'
 
-const app = new OpenAPIHono<{ Bindings: Bindings; Variables: Variables }>()
+const app = createRouter()
 
 // --- Routing ---
 
@@ -15,9 +13,7 @@ export const auth = app
   .openapi(schemas.logoutRoute, handlers.logoutHandler)
 
 // 認証が必要なルートのみ、型昇格したサブルーターに切り出す
-const protectedAuth = new OpenAPIHono<{ Bindings: Bindings; Variables: AuthenticatedVariables }>()
-protectedAuth.use('*', checkJwt)
-protectedAuth.use('*', injectUser)
+const protectedAuth = createAuthRouter()
 protectedAuth.openapi(schemas.successRoute, handlers.successHandler)
 
 auth.route('/', protectedAuth)

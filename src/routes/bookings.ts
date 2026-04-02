@@ -1,11 +1,7 @@
-import { OpenAPIHono } from '@hono/zod-openapi'
 import { getBookingsHandler } from '../handlers/bookings.handler'
-import { type AuthenticatedVariables, authMiddleware } from '../middleware/auth'
-import type { Bindings } from '../types'
+import { createAuthRouter } from '../utils/router'
 import { getBookingsRoute } from './bookings.schema'
 
-const app = new OpenAPIHono<{ Bindings: Bindings; Variables: AuthenticatedVariables }>()
-
-app.use('*', authMiddleware)
+const app = createAuthRouter()
 
 export const bookings = app.openapi(getBookingsRoute, getBookingsHandler)
