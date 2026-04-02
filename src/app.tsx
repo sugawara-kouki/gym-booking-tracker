@@ -1,41 +1,12 @@
 import { swaggerUI } from '@hono/swagger-ui'
-import { OpenAPIHono } from '@hono/zod-openapi'
 import { Hono } from 'hono'
-import { cors } from 'hono/cors'
-import { requestId } from 'hono/request-id'
 import { apiApp } from './api'
-import { errorHandler } from './handlers/error.handler'
 import { Login } from './pages/Login'
 import { renderer } from './renderer'
 import type { Bindings, Variables } from './types'
-import { Logger } from './utils/logger'
+import { createGlobalRouter } from './utils/router'
 
-const app = new OpenAPIHono<{ Bindings: Bindings; Variables: Variables }>()
-
-// グローバルミドルウェアの設定
-app.use('*', requestId())
-
-// カスタム構造化ロガー
-app.use('*', async (c, next) => {
-  const start = Date.now()
-  await next()
-  const end = Date.now()
-
-  Logger.info(c, 'Request completed', {
-    method: c.req.method,
-    path: c.req.path,
-    status: c.res.status,
-    latency: `${end - start}ms`,
-  })
-})
-
-app.use(
-  '*',
-  cors({
-    origin: '*',
-    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  }),
-)
+const app = createGlobalRouter()
 
 // --- UI サブルーター ---
 const uiApp = new Hono<{ Bindings: Bindings; Variables: Variables }>()
@@ -46,14 +17,16 @@ const uiApp = new Hono<{ Bindings: Bindings; Variables: Variables }>()
     return c.render(<Login baseUrl={baseUrl} />)
   })
 
-// メインアプリへのマウント
+/**
+ * /api 配下には api をマウント
+ * ルート配下には ui をマウント
+ */
 app.route('/api', apiApp)
 app.route('/', uiApp)
 
-// グローバルエラーハンドリング
-app.onError(errorHandler)
-
-// OpenAPI / Swagger UI の設定
+/**
+ * OpenAPI / Swagger UI の設定
+ */
 app.openAPIRegistry.registerComponent('securitySchemes', 'cookieAuth', {
   type: 'apiKey',
   in: 'cookie',

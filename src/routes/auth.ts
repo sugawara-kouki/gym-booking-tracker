@@ -1,8 +1,8 @@
 import * as handlers from '../handlers/auth.handler'
-import { createAuthRouter, createRouter } from '../utils/router'
+import { createAPIBaseRouter, createAuthRouter } from '../utils/router'
 import * as schemas from './auth.schema'
 
-const app = createRouter()
+const app = createAPIBaseRouter()
 
 // --- Routing ---
 
