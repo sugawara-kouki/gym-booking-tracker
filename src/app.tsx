@@ -5,7 +5,6 @@ import { cors } from 'hono/cors'
 import { requestId } from 'hono/request-id'
 import { apiApp } from './api'
 import { errorHandler } from './handlers/error.handler'
-import { injectRepos } from './middleware/db'
 import { Login } from './pages/Login'
 import { renderer } from './renderer'
 import type { Bindings, Variables } from './types'
@@ -15,7 +14,6 @@ const app = new OpenAPIHono<{ Bindings: Bindings; Variables: Variables }>()
 
 // グローバルミドルウェアの設定
 app.use('*', requestId())
-app.use('*', injectRepos)
 
 // カスタム構造化ロガー
 app.use('*', async (c, next) => {
