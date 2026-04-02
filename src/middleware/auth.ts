@@ -67,7 +67,7 @@ export const checkJwt = createMiddleware<{ Bindings: Bindings; Variables: Variab
 /**
  * JWT検証とユーザー取得をまとめた統合認証ミドルウェア
  */
-export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: Variables }>(
+export const injectAuth = createMiddleware<{ Bindings: Bindings; Variables: Variables }>(
   async (c, next) => {
     await checkJwt(c, async () => {
       await injectUser(c, next)
