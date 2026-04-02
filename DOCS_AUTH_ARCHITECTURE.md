@@ -33,17 +33,24 @@ export type AuthenticatedRouteHandler<T extends RouteConfig> =
   RouteHandler<T, { Bindings: Bindings, Variables: AuthenticatedVariables }>;
 ```
 
-## 3. 実装のベストプラクティス
+## 3. 実装のベストプラクティス：ルーター・ファクトリ
+
+設定漏れを完全に防ぎ、認識容易性を高めるため、ルーターの作成には専用の**ファクトリ関数**（`src/utils/router.ts`）を使用します。
 
 ### ルーターの定義
-認証が必要なルートを一つのファイルにまとめ、そのルーター自体の型定義で `AuthenticatedVariables` を指定します。
-```typescript
-// src/routes/sync.ts
-const app = new OpenAPIHono<{ Bindings: Bindings, Variables: AuthenticatedVariables }>();
+認証や特定の依存関係が必要な場合、それに対応するファクトリを使用します。
 
-// 必須：ミドルウェアを適用することで、実際のデータと型を同期させる
-app.use('*', authMiddleware);
+```typescript
+import { createAuthRouter, createGmailRouter } from '../utils/router'
+
+// 認証が必須なルート
+const app = createAuthRouter();
+
+// Gmail 連携まで必須なルート
+const gmailApp = createGmailRouter();
 ```
+
+これらを使用することで、**「型の昇格」と「ミドルウェアの適用」がアトミック（不可分）**になり、設定漏れが物理的に発生しなくなります。
 
 ### ハンドラーの定義
 `AuthenticatedRouteHandler` を使うだけで、`c.get('user')` がチェック不要の必須型として扱えます。
@@ -58,33 +65,7 @@ export const syncHandler: AuthenticatedRouteHandler<typeof syncRoute> = async (c
 ## 4. なぜ `hono/factory` 直使い（createHandlers）ではないのか？
 Hono の `factory.createHandlers` は配列を返すため、`zod-openapi` の `app.openapi(route, handler)` メソッド（単一の関数を期待する）と型の相性が悪いためです。
 
-今回採用した「型昇格」アプローチは、`factory` が目指す **「ミドルウェアと型の一貫性」** を、ルーターレベルのスコープでより強力かつクリーンに実現した手法です。
+今回採用した「型昇格」と「ルーター・ファクトリ」の組み合わせは、`factory` が目指す **「ミドルウェアと型の一貫性」** を、`zod-openapi` の制約下でよりクリーンに実現した手法です。
 
 ---
-**Tip**: 新しい認証必須ルートを追加する際は、`AuthenticatedRouteHandler` を使用し、対応するルーターで必ず `authMiddleware` を `app.use` するようにしてください。設定を忘れた場合は、TypeScript がコンパイルエラーとして教えてくれます。
-
-## 5. 応用例: Gmail 連携の型昇格
-認証だけでなく、特定の外部サービス連携（Gmail など）が必要なルートに対しても同様の手法を適用できます。
-
-### A. 型定義の拡張 (`src/middleware/gmail.ts`)
-```typescript
-export type AuthenticatedGmailVariables = AuthenticatedVariables & {
-  gmail: GmailService; // Google 連携済みであることを保証
-}
-```
-
-### B. ルーターでの段階的な昇格 (`src/routes/sync.ts`)
-```typescript
-// 認証のみ必要なルート
-const app = new OpenAPIHono<{ Variables: AuthenticatedVariables }>();
-app.use('*', authMiddleware);
-
-// さらに Gmail も必要なルート専用のサブルーター
-const gmailApp = new OpenAPIHono<{ Variables: AuthenticatedGmailVariables }>();
-gmailApp.use('*', injectGmail);
-
-gmailApp.openapi(syncRoute, syncHandler); // syncHandler は AuthenticatedGmailRouteHandler を使用
-app.route('/', gmailApp);
-```
-
-このように、ルーターをネストさせることで、各ハンドラーが「本当に必要としているリソース」を型レベルで正確に表現できます。
+**Tip**: 新しい認証必須ルートを追加する際は、必ず `createAuthRouter()` を使用してください。これにより必要なミドルウェアが自動的に適用され、型チェックも正しく機能します。
