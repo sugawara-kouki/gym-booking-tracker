@@ -1,4 +1,5 @@
-import type { SyncRunRepository, SyncRunRow, SyncRunStatus } from '../types'
+import type { SyncRunStatus } from '../../constants/status'
+import type { SyncRunRepository, SyncRunRow } from '../types'
 
 export const createD1SyncRunRepository = (db: D1Database): SyncRunRepository => {
   return {

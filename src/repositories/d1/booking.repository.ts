@@ -1,4 +1,4 @@
-import { BOOKING_STATUS } from '../../services/parser'
+import { BOOKING_STATUS } from '../../constants/status'
 import type { BookingRepository, BookingRow } from '../types'
 
 export const createD1BookingRepository = (db: D1Database): BookingRepository => {
