@@ -1,3 +1,4 @@
+import { SYNC_RUN_STATUS } from '../constants/status'
 import type {
   ingestRoute,
   parsePendingRoute,
@@ -5,7 +6,7 @@ import type {
   syncRoute,
   syncStatusRoute,
 } from '../routes/sync.schema'
-import { createSyncOrchestrator, SYNC_RUN_STATUS } from '../services/sync-orchestrator'
+import { createSyncOrchestrator } from '../services/sync-orchestrator'
 import type { AuthenticatedGmailRouteHandler, AuthenticatedRouteHandler } from '../types'
 
 export const resetDataHandler: AuthenticatedRouteHandler<typeof resetDataRoute> = async (c) => {
@@ -29,7 +30,7 @@ export const resetDataHandler: AuthenticatedRouteHandler<typeof resetDataRoute> 
 
 export const ingestHandler: AuthenticatedGmailRouteHandler<typeof ingestRoute> = async (c) => {
   const user = c.get('user')
-  const orchestrator = createSyncOrchestrator(c.env, user.id, c.get('gmail'))
+  const orchestrator = createSyncOrchestrator(user.id, c.get('repos'), c.get('gmail'))
   const result = await orchestrator.ingest(500)
 
   return c.json(
@@ -46,7 +47,7 @@ export const parsePendingHandler: AuthenticatedGmailRouteHandler<typeof parsePen
   c,
 ) => {
   const user = c.get('user')
-  const orchestrator = createSyncOrchestrator(c.env, user.id, c.get('gmail'))
+  const orchestrator = createSyncOrchestrator(user.id, c.get('repos'), c.get('gmail'))
   const repos = c.get('repos')
 
   const runId = crypto.randomUUID()
@@ -69,7 +70,7 @@ export const parsePendingHandler: AuthenticatedGmailRouteHandler<typeof parsePen
 
 export const syncHandler: AuthenticatedGmailRouteHandler<typeof syncRoute> = async (c) => {
   const user = c.get('user')
-  const orchestrator = createSyncOrchestrator(c.env, user.id, c.get('gmail'))
+  const orchestrator = createSyncOrchestrator(user.id, c.get('repos'), c.get('gmail'))
 
   const runId = crypto.randomUUID()
 
