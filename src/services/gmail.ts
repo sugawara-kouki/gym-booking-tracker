@@ -24,6 +24,7 @@ const GmailMessageListResponseSchema = z.object({
 const GmailDetailsSchema = z.object({
   id: z.string(),
   snippet: z.string(),
+  internalDate: z.string(), // ミリ秒単位の文字列
   payload: z
     .object({
       headers: z
@@ -69,6 +70,7 @@ export interface GmailMessageInfo {
   subject: string
   snippet: string
   body: string
+  receivedAt: number
 }
 
 /**
@@ -246,6 +248,7 @@ export const createGmailService = (
         subject,
         snippet: data.snippet,
         body,
+        receivedAt: Math.floor(Number.parseInt(data.internalDate, 10) / 1000),
       }
     },
   }

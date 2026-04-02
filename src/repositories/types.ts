@@ -1,10 +1,4 @@
-import type {
-  ParseStatus as BaseParseStatus,
-  SyncRunStatus as BaseSyncRunStatus,
-} from '../services/sync-orchestrator'
-
-export type ParseStatus = BaseParseStatus
-export type SyncRunStatus = BaseSyncRunStatus
+import type { BookingStatus, ParseStatus, SyncRunStatus } from '../constants/status'
 
 /**
  * データベースの各テーブル行の基本型定義
@@ -17,6 +11,7 @@ export interface RawEmailRow {
   subject: string
   snippet: string
   body: string | null
+  received_at: number // 追加
   fetched_at: number
   parse_status: ParseStatus
 }
@@ -53,7 +48,7 @@ export interface BookingRow {
   registration_number: string | null
   purpose: string | null
   court_info: string | null
-  status: string
+  status: BookingStatus
   raw_mail_id: string
   updated_at: number
 }
@@ -89,6 +84,15 @@ export interface BookingRepository {
 
 export interface RawEmailRepository {
   findById(userId: string, id: string): Promise<RawEmailRow | null>
+  /** 指定ユーザーの最新のメール受信日時を取得する */
+  findLatestReceivedAt(userId: string): Promise<number | null>
+  /** 最新の N 件を削除し、関連する bookings, sync_logs も削除する（デバッグ用） */
+  deleteLatest(userId: string, limit: number): Promise<number>
+  /**
+   * 与えられた ID のうち、既にデータベースに存在する ID のみを抽出して返す
+   * (Ingest 時の Waterfall を解消するために導入)
+   */
+  filterExistingIds(userId: string, ids: string[]): Promise<string[]>
   create(userId: string, email: Omit<RawEmailRow, 'user_id' | 'fetched_at'>): Promise<void>
   batchCreate(userId: string, emails: Omit<RawEmailRow, 'user_id' | 'fetched_at'>[]): Promise<void>
   updateParseStatus(userId: string, id: string, status: ParseStatus): Promise<void>
