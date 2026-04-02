@@ -1,6 +1,7 @@
 import { errorHandler } from '../handlers/error.handler'
 import { auth } from '../routes/auth'
 import { bookings } from '../routes/bookings'
+import { debug } from '../routes/debug'
 import { sync } from '../routes/sync'
 import { createAPIBaseRouter } from '../utils/router'
 
@@ -13,6 +14,7 @@ const routes = createAPIBaseRouter()
   .route('/sync', sync)
   .route('/bookings', bookings)
   .route('/auth', auth)
+  .route('/debug', debug)
 
 /**
  * API 配下専用のエラーハンドリング。
