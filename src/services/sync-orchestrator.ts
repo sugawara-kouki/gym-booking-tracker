@@ -66,11 +66,13 @@ export const createSyncOrchestrator = (
      * Gmail APIからメッセージを取得し、未処理分を DB に保存する（Ingest 層）
      */
     async ingest(maxLimit: number): Promise<{ count: number }> {
-      const lastSuccess = await repos.syncRuns.findLastSuccess(userId)
+      // 改善：DB 登録日時ではなく、メール本来の受信日時（received_at）を基準にする
+      const latestReceivedAt = await repos.rawEmails.findLatestReceivedAt(userId)
       let query = GMAIL_QUERY
 
-      if (lastSuccess?.executed_at) {
-        const afterDate = new Date((lastSuccess.executed_at - 86400) * 1000)
+      if (latestReceivedAt) {
+        // 最新メールの受信日時から 1 日引いたバッファを持たせ、取りこぼしを防ぐ
+        const afterDate = new Date((latestReceivedAt - 86400) * 1000)
         const yyyy = afterDate.getFullYear()
         const mm = String(afterDate.getMonth() + 1).padStart(2, '0')
         const dd = String(afterDate.getDate()).padStart(2, '0')
@@ -88,12 +90,7 @@ export const createSyncOrchestrator = (
         const messages = result.messages
         pageToken = result.nextPageToken
 
-        if (messages.length === 0) {
-          Logger.info(null, 'No messages found for query', { query, userId })
-          break
-        }
-
-        Logger.info(null, `Found ${messages.length} messages in current page`, { userId })
+        if (messages.length === 0) break
 
         // バッチごとに処理
         for (let i = 0; i < messages.length; i += DB_BATCH_SIZE) {
@@ -108,26 +105,12 @@ export const createSyncOrchestrator = (
 
           const toFetch = batch.filter((m) => !existingSet.has(m.id))
 
-          Logger.info(
-            null,
-            `Batch status: ${batch.length} scanned, ${existingIds.length} existing, ${toFetch.length} new`,
-            {
-              userId,
-            },
-          )
-
           if (toFetch.length > 0) {
             const validDetails: Omit<RawEmailRow, 'user_id' | 'fetched_at'>[] = []
 
-            // 改善: Gmail API の同時接続制限を回避するため、10件ずつのチャンクでフェッチする
+            // Gmail API の同時接続制限を回避するため、並列数を制限してフェッチ
             for (let j = 0; j < toFetch.length; j += FETCH_CONCURRENCY_LIMIT) {
               const chunk = toFetch.slice(j, j + FETCH_CONCURRENCY_LIMIT)
-              Logger.debug?.(null, 'Fetching message detail chunk', {
-                userId,
-                offset: j,
-                count: chunk.length,
-              })
-
               const chunkDetails = await Promise.all(
                 chunk.map(async (msg) => {
                   try {
@@ -139,6 +122,7 @@ export const createSyncOrchestrator = (
                       subject: detail.subject,
                       snippet: detail.snippet,
                       body: detail.body || null,
+                      received_at: detail.receivedAt, // 本来の受信日時をセット
                       parse_status: PARSE_STATUS.PENDING as ParseStatus,
                     }
                   } catch (err) {
@@ -161,9 +145,6 @@ export const createSyncOrchestrator = (
             if (validDetails.length > 0) {
               await repos.rawEmails.batchCreate(userId, validDetails)
               ingestedCount += validDetails.length
-              Logger.info(null, `Successfully ingested ${validDetails.length} new messages`, {
-                userId,
-              })
             }
           }
 
@@ -187,8 +168,6 @@ export const createSyncOrchestrator = (
      */
     async processPending(runId: string): Promise<{ successCount: number; errorCount: number }> {
       const pendingEmails = await repos.rawEmails.findPending(userId)
-
-      Logger.info(null, `Processing ${pendingEmails.length} pending emails`, { runId, userId })
 
       if (pendingEmails.length === 0) return { successCount: 0, errorCount: 0 }
 
