@@ -14,7 +14,7 @@ export const injectRepos = createMiddleware<{ Bindings: Bindings; Variables: Var
     c.set('repos', repos)
 
     // デバッグ用の構造化ログ（不必要な場合は将来的に削除可能）
-    Logger.debug?.(c, 'Repositories injected into context')
+    Logger.debug(c, 'Repositories injected into context')
 
     await next()
   },
